@@ -7,7 +7,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "dev": "pnpm --filter @uomp/server dev",
-    "cli": "pnpm --filter @uomp/cli uomp",
+    "cli": "node ./packages/cli/dist/cli.js",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
