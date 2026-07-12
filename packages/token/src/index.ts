@@ -1,5 +1,11 @@
 import { SignJWT, jwtVerify, exportJWK, importJWK, generateKeyPair, type JWTPayload, type JWK } from 'jose';
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
 import type { Scopes } from '@uomp/core';
+import {
+  PRIVATE_KEY_FILE_NAME,
+  PUBLIC_KEY_FILE_NAME,
+} from '@uomp/core';
 
 export interface CapabilityTokenPayload {
   version: string;
@@ -40,6 +46,26 @@ export class JWTTokenIssuer implements TokenIssuer {
     this.publicJwk.kid = 'uomp-auth-key-1';
     this.publicJwk.alg = 'EdDSA';
     return this.privateJwk;
+  }
+
+  async loadOrGenerateKey(secretsDir: string): Promise<JWK> {
+    const privatePath = join(secretsDir, PRIVATE_KEY_FILE_NAME);
+    const publicPath = join(secretsDir, PUBLIC_KEY_FILE_NAME);
+
+    try {
+      const privateJwk = JSON.parse(await readFile(privatePath, 'utf-8')) as JWK;
+      const publicJwk = JSON.parse(await readFile(publicPath, 'utf-8')) as JWK;
+      this.privateJwk = privateJwk;
+      this.publicJwk = publicJwk;
+      return privateJwk;
+    } catch {
+      // If reading fails for any reason, generate and persist new keys.
+      await mkdir(secretsDir, { recursive: true });
+      await this.generateKey();
+      await writeFile(privatePath, JSON.stringify(this.privateJwk, null, 2));
+      await writeFile(publicPath, JSON.stringify(this.publicJwk, null, 2));
+      return this.privateJwk!;
+    }
   }
 
   async importKey(jwk: JWK): Promise<void> {

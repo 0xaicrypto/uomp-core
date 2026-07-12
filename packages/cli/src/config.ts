@@ -4,6 +4,7 @@ import { join } from 'path';
 import {
   DATA_DIR_NAME,
   AGENTS_DIR_NAME,
+  SECRETS_DIR_NAME,
   MEMORY_DB_NAME,
   AUDIT_DB_NAME,
   AUTH_DB_NAME,
@@ -14,6 +15,7 @@ import {
 export class UompConfig {
   readonly dataDir: string;
   readonly agentsDir: string;
+  readonly secretsDir: string;
   readonly memoryDbPath: string;
   readonly auditDbPath: string;
   readonly authDbPath: string;
@@ -23,6 +25,7 @@ export class UompConfig {
   constructor() {
     this.dataDir = join(homedir(), DATA_DIR_NAME);
     this.agentsDir = join(this.dataDir, AGENTS_DIR_NAME);
+    this.secretsDir = join(this.dataDir, SECRETS_DIR_NAME);
     this.memoryDbPath = join(this.dataDir, MEMORY_DB_NAME);
     this.auditDbPath = join(this.dataDir, AUDIT_DB_NAME);
     this.authDbPath = join(this.dataDir, AUTH_DB_NAME);
@@ -33,6 +36,7 @@ export class UompConfig {
   async init(): Promise<void> {
     await mkdir(this.dataDir, { recursive: true });
     await mkdir(this.agentsDir, { recursive: true });
+    await mkdir(this.secretsDir, { recursive: true });
   }
 
   get serverUrl(): string {

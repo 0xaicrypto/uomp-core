@@ -6,6 +6,7 @@ import { MemoryCommands } from './commands/memory.js';
 import { RegistryCommands } from './commands/registry.js';
 import { RunCommands } from './commands/run.js';
 import { SessionCommands } from './commands/session.js';
+import { AuthorizeCommands } from './commands/authorize.js';
 
 const program = new Command();
 
@@ -39,8 +40,19 @@ program
   .addCommand(RegistryCommands.install());
 
 program
+  .command('authorize <agent>')
+  .description('Authorize an agent and print the capability token (standard mode: agent runs independently)')
+  .option('-s, --scope <scopes...>', 'Additional read scopes (tags)')
+  .action(async (agent: string, options: { scope?: string[] }) => {
+    const config = new UompConfig();
+    await config.init();
+    const authorizer = new AuthorizeCommands(config);
+    await authorizer.authorize(agent, options.scope ?? []);
+  });
+
+program
   .command('run <agent>')
-  .description('Run an agent with authorization')
+  .description('Run an agent as a child process with authorization (local development shortcut)')
   .option('-s, --scope <scopes...>', 'Additional read scopes (tags)')
   .action(async (agent: string, options: { scope?: string[] }) => {
     const config = new UompConfig();

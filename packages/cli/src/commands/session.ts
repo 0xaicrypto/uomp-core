@@ -9,7 +9,7 @@ export class SessionCommands {
     const config = new UompConfig();
     await config.init();
     const issuer = new JWTTokenIssuer();
-    await issuer.generateKey();
+    await issuer.loadOrGenerateKey(config.secretsDir);
     return new AuthService({
       dbPath: config.authDbPath,
       issuer,

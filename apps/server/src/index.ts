@@ -2,17 +2,19 @@ import { serve } from '@hono/node-server';
 import { mkdir } from 'fs/promises';
 import { homedir } from 'os';
 import { join } from 'path';
-import { DEFAULT_HOST, DEFAULT_PORT, DATA_DIR_NAME } from '@uomp/core';
+import { DEFAULT_HOST, DEFAULT_PORT, DATA_DIR_NAME, SECRETS_DIR_NAME } from '@uomp/core';
 import { AuthService } from '@uomp/auth';
 import { MemoryGuard } from '@uomp/guard';
 import { JWTTokenIssuer } from '@uomp/token';
 
 async function main() {
   const dataDir = join(homedir(), DATA_DIR_NAME);
+  const secretsDir = join(dataDir, SECRETS_DIR_NAME);
   await mkdir(dataDir, { recursive: true });
+  await mkdir(secretsDir, { recursive: true });
 
   const issuer = new JWTTokenIssuer();
-  await issuer.generateKey();
+  await issuer.loadOrGenerateKey(secretsDir);
 
   const authDbPath = join(dataDir, 'auth.db');
   const auditDbPath = join(dataDir, 'audit.db');

@@ -52,8 +52,45 @@ pnpm cli init
 
 # 添加一条记忆
 pnpm cli memory add preference.theme "dark" --tags preference,ui --sensitivity low
+```
 
-# 运行示例 Agent（交互式授权）
+有两种使用方式：
+
+- **标准模式**：CLI 只负责授权并输出 Token，Agent 独立运行。
+- **本地开发 shortcut**：`pnpm cli run` 把授权、启动 Guard、启动 Agent 打包在一起。
+
+### 方式一：标准模式（推荐）
+
+终端 1：启动 Auth + Guard 服务：
+
+```bash
+pnpm --filter @uomp/server start
+```
+
+终端 2：为示例 Agent 授权，获得 Token：
+
+```bash
+pnpm cli authorize ./examples/calendar-agent
+```
+
+按提示选择 `preference` 标签授权后，CLI 会输出：
+
+```bash
+export UOM_TOKEN="<token>"
+export UOMP_BASE_URL="http://127.0.0.1:9374"
+```
+
+终端 2：独立启动 Agent：
+
+```bash
+export UOM_TOKEN="<token>"
+export UOMP_BASE_URL="http://127.0.0.1:9374"
+node ./examples/calendar-agent/index.js
+```
+
+### 方式二：本地开发 shortcut
+
+```bash
 pnpm cli run ./examples/calendar-agent
 ```
 
@@ -99,11 +136,28 @@ pnpm cli memory add preference.locale "zh-CN" --tags preference --sensitivity lo
 
 `examples/calendar-agent/` 是一个读取用户偏好的示例 Agent。
 
+#### 标准模式
+
+```bash
+# 终端 1：启动服务
+pnpm --filter @uomp/server start
+
+# 终端 2：授权并获取 Token
+pnpm cli authorize ./examples/calendar-agent
+
+# 终端 2：使用输出的 Token 独立启动 Agent
+export UOM_TOKEN="<token>"
+export UOMP_BASE_URL="http://127.0.0.1:9374"
+node ./examples/calendar-agent/index.js
+```
+
+#### 本地开发 shortcut
+
 ```bash
 pnpm cli run ./examples/calendar-agent
 ```
 
-CLI 会显示 Agent 的 `uom.json` 声明，并提示你选择授权的标签：
+无论哪种方式，CLI 都会显示 Agent 的 `uom.json` 声明，并提示你选择授权的标签：
 
 ```
 Agent "Calendar Assistant" requests access to:

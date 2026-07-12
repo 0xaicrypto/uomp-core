@@ -1,20 +1,17 @@
-import { spawn } from 'child_process';
 import { readFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { UompConfig } from '../config.js';
 import { AuthService } from '@uomp/auth';
-import { MemoryGuard } from '@uomp/guard';
 import { JWTTokenIssuer } from '@uomp/token';
 import { IdentityVerifier } from '@uomp/identity';
 import type { AgentManifest, Scopes } from '@uomp/core';
 
-export class RunCommands {
+export class AuthorizeCommands {
   private config: UompConfig;
   private issuer: JWTTokenIssuer;
   private authService: AuthService;
-  private guard: MemoryGuard;
 
   constructor(config: UompConfig) {
     this.config = config;
@@ -23,14 +20,13 @@ export class RunCommands {
       dbPath: config.authDbPath,
       issuer: this.issuer,
     });
-    this.guard = new MemoryGuard({
-      dbPath: config.auditDbPath,
-      memoryDbPath: config.memoryDbPath,
-      issuer: this.issuer,
-    });
   }
 
-  async run(agentPath: string, additionalScopes: string[]): Promise<void> {
+  async ensureKeyPair(): Promise<void> {
+    await this.issuer.loadOrGenerateKey(this.config.secretsDir);
+  }
+
+  async authorize(agentPath: string, additionalScopes: string[]): Promise<void> {
     await this.ensureKeyPair();
 
     const resolvedPath = resolve(agentPath);
@@ -69,34 +65,15 @@ export class RunCommands {
 
     console.log(chalk.green(`Session granted: ${session.sessionId}`));
     console.log(chalk.gray(`Token expires at: ${grant.expiresAt}`));
+    console.log('');
+    console.log(chalk.cyan('Set the following environment variables in the Agent process:'));
+    console.log(`  export UOM_TOKEN="${grant.token}"`);
+    console.log(`  export UOMP_BASE_URL="${this.config.serverUrl}"`);
+    console.log('');
+    console.log(chalk.gray('Then start the Agent independently. For local development, you can also use:'));
+    console.log(chalk.gray(`  pnpm cli run ${agentPath}`));
 
-    // Start server in background
-    await this.startServer();
-
-    // Start agent process
-    const agentEntry = join(resolvedPath, 'index.js');
-    console.log(chalk.blue(`Starting agent: ${agentEntry}`));
-
-    const child = spawn('node', [agentEntry], {
-      env: {
-        ...process.env,
-        UOM_TOKEN: grant.token,
-        UOMP_BASE_URL: this.config.serverUrl,
-      },
-      stdio: 'inherit',
-    });
-
-    child.on('exit', async code => {
-      console.log(chalk.gray(`Agent exited with code ${code}`));
-      this.authService.closeSession(session.sessionId);
-      this.authService.close();
-      this.guard.close();
-      process.exit(code ?? 0);
-    });
-  }
-
-  private async ensureKeyPair(): Promise<void> {
-    await this.issuer.loadOrGenerateKey(this.config.secretsDir);
+    this.authService.close();
   }
 
   private async loadManifest(agentPath: string): Promise<AgentManifest | null> {
@@ -161,58 +138,36 @@ export class RunCommands {
       ]),
     ];
 
-    console.log(chalk.bold(`\nAgent "${manifest.agent.name}" requests access to:`));
-    console.log(`Description: ${manifest.agent.description ?? 'No description'}`);
-    console.log(`Publisher: ${manifest.agent.publisher ?? 'Unknown'}`);
-
-    if (readTags.length > 0) {
-      const { selectedTags } = await inquirer.prompt([
-        {
-          type: 'checkbox',
-          name: 'selectedTags',
-          message: 'Select tags to authorize for reading:',
-          choices: readTags.map(tag => ({ name: tag, value: tag, checked: true })),
-        },
-      ]);
-
+    if (readTags.length === 0) {
       return {
-        read: {
-          tags: selectedTags as string[],
-          keys: manifest.requestedScopes.read.keys ?? [],
-          denyTags: [],
-          denyKeys: [],
-        },
-        write: {
-          tags: [],
-          keys: [],
-          denyTags: [],
-          denyKeys: [],
-        },
+        read: { tags: [], keys: [], denyTags: [], denyKeys: [] },
+        write: { tags: [], keys: [], denyTags: [], denyKeys: [] },
       };
     }
 
+    const { selectedTags } = await inquirer.prompt([
+      {
+        type: 'checkbox',
+        name: 'selectedTags',
+        message: 'Select tags to authorize for reading:',
+        choices: readTags,
+        default: manifest.requestedScopes.read.tags,
+      },
+    ]);
+
     return {
-      read: { tags: [], keys: [], denyTags: [], denyKeys: [] },
-      write: { tags: [], keys: [], denyTags: [], denyKeys: [] },
+      read: {
+        tags: selectedTags as string[],
+        keys: manifest.requestedScopes.read.keys ?? [],
+        denyTags: manifest.requestedScopes.read.denyTags ?? [],
+        denyKeys: manifest.requestedScopes.read.denyKeys ?? [],
+      },
+      write: {
+        tags: [],
+        keys: [],
+        denyTags: [],
+        denyKeys: [],
+      },
     };
-  }
-
-  private async startServer(): Promise<void> {
-    const { serve } = await import('@hono/node-server');
-
-    const authApp = this.authService.getApp();
-    const guardApp = this.guard.getApp();
-
-    // Combine auth and guard routes
-    const combined = authApp;
-    combined.route('/', guardApp);
-
-    serve({
-      fetch: combined.fetch,
-      port: this.config.port,
-      hostname: this.config.host,
-    });
-
-    console.log(chalk.gray(`UOMP server listening on ${this.config.serverUrl}`));
   }
 }
