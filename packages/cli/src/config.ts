@@ -1,0 +1,41 @@
+import { mkdir } from 'fs/promises';
+import { homedir } from 'os';
+import { join } from 'path';
+import {
+  DATA_DIR_NAME,
+  AGENTS_DIR_NAME,
+  MEMORY_DB_NAME,
+  AUDIT_DB_NAME,
+  AUTH_DB_NAME,
+  DEFAULT_PORT,
+  DEFAULT_HOST,
+} from '@uomp/core';
+
+export class UompConfig {
+  readonly dataDir: string;
+  readonly agentsDir: string;
+  readonly memoryDbPath: string;
+  readonly auditDbPath: string;
+  readonly authDbPath: string;
+  readonly port: number;
+  readonly host: string;
+
+  constructor() {
+    this.dataDir = join(homedir(), DATA_DIR_NAME);
+    this.agentsDir = join(this.dataDir, AGENTS_DIR_NAME);
+    this.memoryDbPath = join(this.dataDir, MEMORY_DB_NAME);
+    this.auditDbPath = join(this.dataDir, AUDIT_DB_NAME);
+    this.authDbPath = join(this.dataDir, AUTH_DB_NAME);
+    this.port = DEFAULT_PORT;
+    this.host = DEFAULT_HOST;
+  }
+
+  async init(): Promise<void> {
+    await mkdir(this.dataDir, { recursive: true });
+    await mkdir(this.agentsDir, { recursive: true });
+  }
+
+  get serverUrl(): string {
+    return `http://${this.host}:${this.port}`;
+  }
+}
