@@ -37,10 +37,10 @@ export class MemoryStore {
   }
 
   getByTag<T = unknown>(tag: string): MemoryItem<T>[] {
-    // better-sqlite3 doesn't have native JSON array search; use LIKE for MVP
+    // Use SQLite JSON1 extension to search inside JSON tag arrays.
     const rows = this.db
-      .prepare("SELECT * FROM memory_items WHERE ',' || tags || ',' LIKE ?")
-      .all(`%,${tag},%`) as Record<string, string>[];
+      .prepare("SELECT * FROM memory_items WHERE EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)")
+      .all(tag) as Record<string, string>[];
     return rows.map(row => this.deserialize(row));
   }
 

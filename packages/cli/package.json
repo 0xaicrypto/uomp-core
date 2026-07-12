@@ -10,6 +10,7 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "uomp": "node ./dist/cli.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "echo 'lint not configured'",
     "test": "echo 'no tests'"

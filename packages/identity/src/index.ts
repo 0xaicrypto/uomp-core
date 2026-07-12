@@ -11,15 +11,24 @@ export interface VerificationResult {
 }
 
 export class IdentityVerifier {
-  private didResolver: Resolver;
+  private didResolver: Resolver | undefined;
 
   constructor() {
-    // Cast to any to handle version mismatches between did-resolver and method resolvers in MVP.
-    // In production, pin compatible versions of did-resolver, ethr-did-resolver, and web-did-resolver.
-    this.didResolver = new Resolver({
-      ...(ethrDidResolver({} as any) as any),
-      ...(webDidResolver() as any),
-    });
+    try {
+      // MVP: configure ethr-did-resolver with a placeholder network.
+      // In production, use a real RPC endpoint or web-did-resolver for did:web.
+      this.didResolver = new Resolver({
+        ...(ethrDidResolver({
+          networks: [
+            { name: 'mainnet', rpcUrl: 'https://ethereum.publicnode.com' },
+          ],
+        } as any) as any),
+        ...(webDidResolver() as any),
+      });
+    } catch {
+      // If DID resolver initialization fails, continue without DID verification.
+      this.didResolver = undefined;
+    }
   }
 
   async verifyManifest(manifest: AgentManifest): Promise<VerificationResult> {
@@ -43,6 +52,10 @@ export class IdentityVerifier {
   }
 
   async verifyDid(did: string): Promise<VerificationResult> {
+    if (!this.didResolver) {
+      return { valid: false, method: 'did', error: 'DID resolver not initialized' };
+    }
+
     try {
       const doc = await this.didResolver.resolve(did);
       if (doc.didDocument) {

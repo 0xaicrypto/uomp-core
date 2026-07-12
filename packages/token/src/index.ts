@@ -58,7 +58,7 @@ export class JWTTokenIssuer implements TokenIssuer {
     const jwt = await new SignJWT(this.payloadToJWT(payload))
       .setProtectedHeader({ alg: 'EdDSA', kid: this.privateJwk.kid ?? 'uomp-key' })
       .setIssuedAt()
-      .setExpirationTime(payload.expiresAt)
+      .setExpirationTime(new Date(payload.expiresAt))
       .sign(privateKey);
 
     return jwt;
