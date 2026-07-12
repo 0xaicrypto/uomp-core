@@ -251,6 +251,82 @@ pnpm build
 pnpm -r exec rm -rf dist
 ```
 
+## 认证与授权设计
+
+UOMP 的认证/授权分为三层：**Agent 声明 → 用户授权 → Token 鉴权**。
+
+### Agent 声明请求范围
+
+Agent 通过 `uom.json` 声明它想访问的范围，不自带任何权限：
+
+```json
+{
+  "requested_scopes": {
+    "read": {
+      "tags": ["preference"],
+      "keys": [],
+      "deny_tags": ["private"],
+      "deny_keys": []
+    }
+  }
+}
+```
+
+- `tags`：按标签批量请求
+- `keys`：按具体 key 请求
+- `deny_tags` / `deny_keys`：显式排除
+
+### 用户授权（CLI）
+
+`pnpm cli run ./my-agent` 会：
+
+1. 解析 `uom.json`
+2. 可选验证 Agent 身份（DID / GPG）
+3. 交互式询问用户授权哪些 tag
+4. 创建 Session 并调用 `grantSession` 签发 JWT
+5. 把 `UOM_TOKEN` 注入 Agent 进程
+
+### Capability Token
+
+Token 是本地签发的 **JWT EdDSA**，默认有效期 30 分钟，包含：
+
+```ts
+{
+  sessionId: 'sess_xxx',
+  agentId: 'my-agent',
+  scopes: {
+    read: { tags: ['preference'], keys: [], denyTags: ['private'], denyKeys: [] }
+  },
+  profile: 'local',
+  audience: 'http://127.0.0.1:9374',
+  limits: { maxReadQueries: 100, maxWriteQueries: 0 }
+}
+```
+
+### Guard 鉴权
+
+Agent 每次请求必须携带：
+
+```http
+Authorization: Bearer <UOM_TOKEN>
+```
+
+Guard 会：
+
+1. 校验 JWT 签名与过期时间
+2. 按 token 中的 `scopes` 判断 tag/key 是否被授权
+3. 拒绝 `deny_tags` / `deny_keys` 中的范围
+4. `sensitivity: high` 的数据必须显式通过 `keys` 授权
+5. 记录审计日志到 `audit_logs`
+
+### 身份验证（可选）
+
+MVP 支持 DID（`did:ethr` / `did:web`）和 GPG 验证，但**不强制**。未配置 identity 的 Agent 会收到 CLI 的黄色警告，但仍可运行。
+
+### 写入限制
+
+MVP 阶段 Guard 对 `POST / DELETE` 写操作统一返回 `503 WRITE_NOT_AVAILABLE`。未来的 staging/审批机制完成后才会开放 Agent 写入。
+
 ## 协议规范
 
 见 [specs/draft-00.md](./specs/draft-00.md)。
