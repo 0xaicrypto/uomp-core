@@ -15,6 +15,7 @@
 <p align="center">
   <a href="https://www.uomp.org"><img src="https://img.shields.io/badge/website-uomp.org-0A0A0A?logo=google-chrome&logoColor=white" alt="Website" /></a>
   <a href="https://www.uomp.org/spec/"><img src="https://img.shields.io/badge/spec-Draft--00-6B7280" alt="Spec" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" /></a>
   <a href="https://github.com/0xaicrypto/uomp/discussions"><img src="https://img.shields.io/github/discussions/0xaicrypto/uomp" alt="Discussions" /></a>
   <a href="https://github.com/0xaicrypto/uomp-core/issues"><img src="https://img.shields.io/github/issues/0xaicrypto/uomp-core" alt="Issues" /></a>
   <a href="https://github.com/0xaicrypto/uomp-core"><img src="https://img.shields.io/github/stars/0xaicrypto/uomp-core?style=social" alt="Stars" /></a>
