@@ -1,0 +1,4 @@
+symbol,quantity,cost_basis,market_value,currency
+AAPL,100,150.00,17500.00,USD
+TSLA,50,200.00,9500.00,USD
+NVDA,30,300.00,12000.00,USD

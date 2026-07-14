@@ -16,18 +16,19 @@
     "test": "echo 'no tests'"
   },
   "dependencies": {
-    "@uomp/core": "workspace:*",
-    "@uomp/store": "workspace:*",
+    "@hono/node-server": "^1.11.0",
     "@uomp/auth": "workspace:*",
+    "@uomp/core": "workspace:*",
     "@uomp/guard": "workspace:*",
-    "@uomp/token": "workspace:*",
     "@uomp/identity": "workspace:*",
     "@uomp/registry": "workspace:*",
     "@uomp/sdk": "workspace:*",
-    "@hono/node-server": "^1.11.0",
+    "@uomp/store": "workspace:*",
+    "@uomp/token": "workspace:*",
+    "chalk": "^5.3.0",
     "commander": "^12.1.0",
-    "inquirer": "^10.0.0",
-    "chalk": "^5.3.0"
+    "csv-parse": "^7.0.1",
+    "inquirer": "^10.0.0"
   },
   "devDependencies": {
     "@types/inquirer": "^9.0.7",

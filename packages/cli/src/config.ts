@@ -15,6 +15,7 @@ import {
 export class UompConfig {
   readonly dataDir: string;
   readonly agentsDir: string;
+  readonly registryDir: string;
   readonly secretsDir: string;
   readonly memoryDbPath: string;
   readonly auditDbPath: string;
@@ -25,6 +26,7 @@ export class UompConfig {
   constructor() {
     this.dataDir = join(homedir(), DATA_DIR_NAME);
     this.agentsDir = join(this.dataDir, AGENTS_DIR_NAME);
+    this.registryDir = join(this.dataDir, 'registry');
     this.secretsDir = join(this.dataDir, SECRETS_DIR_NAME);
     this.memoryDbPath = join(this.dataDir, MEMORY_DB_NAME);
     this.auditDbPath = join(this.dataDir, AUDIT_DB_NAME);
@@ -36,6 +38,7 @@ export class UompConfig {
   async init(): Promise<void> {
     await mkdir(this.dataDir, { recursive: true });
     await mkdir(this.agentsDir, { recursive: true });
+    await mkdir(this.registryDir, { recursive: true });
     await mkdir(this.secretsDir, { recursive: true });
   }
 

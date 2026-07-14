@@ -1,17 +1,23 @@
-import { readFile } from 'fs/promises';
-import { join, resolve } from 'path';
+import { resolve } from 'path';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
+import { serve } from '@hono/node-server';
 import { UompConfig } from '../config.js';
 import { AuthService } from '@uomp/auth';
+import { MemoryGuard } from '@uomp/guard';
+import { MemoryStore } from '@uomp/store';
 import { JWTTokenIssuer } from '@uomp/token';
 import { IdentityVerifier } from '@uomp/identity';
-import type { AgentManifest, Scopes } from '@uomp/core';
+import { loadManifest } from '../utils/manifest.js';
+import type { AgentManifest, ScopeAction, Scopes, Sensitivity } from '@uomp/core';
+import { writeFile } from 'fs/promises';
 
 export class AuthorizeCommands {
   private config: UompConfig;
   private issuer: JWTTokenIssuer;
   private authService: AuthService;
+  private guard: MemoryGuard;
+  private store: MemoryStore;
 
   constructor(config: UompConfig) {
     this.config = config;
@@ -20,17 +26,23 @@ export class AuthorizeCommands {
       dbPath: config.authDbPath,
       issuer: this.issuer,
     });
+    this.guard = new MemoryGuard({
+      dbPath: config.auditDbPath,
+      memoryDbPath: config.memoryDbPath,
+      issuer: this.issuer,
+    });
+    this.store = new MemoryStore({ dbPath: config.memoryDbPath });
   }
 
   async ensureKeyPair(): Promise<void> {
     await this.issuer.loadOrGenerateKey(this.config.secretsDir);
   }
 
-  async authorize(agentPath: string, additionalScopes: string[]): Promise<void> {
+  async authorize(agentPath: string, options: { scope?: string[]; output?: string; duration?: string; server?: boolean }): Promise<void> {
     await this.ensureKeyPair();
 
     const resolvedPath = resolve(agentPath);
-    const manifest = await this.loadManifest(resolvedPath);
+    const manifest = await loadManifest(resolvedPath);
 
     if (!manifest) {
       console.log(chalk.red(`Could not find uom.json in ${resolvedPath}`));
@@ -46,15 +58,22 @@ export class AuthorizeCommands {
       console.log(chalk.green(`Identity verified via ${verification.method}`));
     }
 
-    // Show authorization panel
-    const grantedScopes = await this.promptForScopes(manifest, additionalScopes);
+    // Show authorization panel with field-level summary
+    // If scopes are provided via CLI, use them directly (non-interactive mode).
+    const grantedScopes = options.scope && options.scope.length > 0
+      ? this.buildScopesFromTags(manifest, options.scope)
+      : await this.promptForScopes(manifest, []);
 
     // Create session
+    const durationMinutes = options.duration ? parseInt(options.duration, 10) : 30;
+    // Close Memory Store once keys have been collected
+    this.store.close();
+
     const session = this.authService.createSession({
       agent_id: manifest.agent.id,
       agent_name: manifest.agent.name,
       requested_scopes: manifest.requestedScopes,
-      duration_minutes: 30,
+      duration_minutes: durationMinutes,
     });
 
     const grant = await this.authService.grantSession(session.sessionId, grantedScopes);
@@ -66,68 +85,31 @@ export class AuthorizeCommands {
     console.log(chalk.green(`Session granted: ${session.sessionId}`));
     console.log(chalk.gray(`Token expires at: ${grant.expiresAt}`));
     console.log('');
-    console.log(chalk.cyan('Set the following environment variables in the Agent process:'));
-    console.log(`  export UOM_TOKEN="${grant.token}"`);
-    console.log(`  export UOMP_BASE_URL="${this.config.serverUrl}"`);
-    console.log('');
-    console.log(chalk.gray('Then start the Agent independently. For local development, you can also use:'));
-    console.log(chalk.gray(`  pnpm cli run ${agentPath}`));
 
-    this.authService.close();
-  }
+    const envBlock = [
+      `export UOM_TOKEN="${grant.token}"`,
+      `export UOMP_BASE_URL="${this.config.serverUrl}"`,
+    ].join('\n');
 
-  private async loadManifest(agentPath: string): Promise<AgentManifest | null> {
-    try {
-      const content = await readFile(join(agentPath, 'uom.json'), 'utf-8');
-      const raw = JSON.parse(content) as Record<string, unknown>;
-      return this.normalizeManifest(raw);
-    } catch {
-      return null;
+    if (options.output) {
+      await writeFile(options.output, envBlock + '\n', 'utf-8');
+      console.log(chalk.cyan(`Token saved to: ${options.output}`));
+      console.log(chalk.gray(`Run: source ${options.output}`));
+    } else {
+      console.log(chalk.cyan('Set the following environment variables in the terminal where you run the Agent:'));
+      console.log(envBlock.split('\n').map(line => `  ${line}`).join('\n'));
     }
-  }
 
-  private normalizeManifest(raw: Record<string, unknown>): AgentManifest {
-    const scopeAction = (rawAction: Record<string, unknown>) => ({
-      tags: (rawAction.tags as string[]) ?? [],
-      keys: (rawAction.keys as string[]) ?? [],
-      denyTags: (rawAction.deny_tags as string[]) ?? [],
-      denyKeys: (rawAction.deny_keys as string[]) ?? [],
-    });
+    console.log('');
+    console.log(chalk.gray('Then start the Agent independently. Example:'));
+    console.log(chalk.gray(`  node ${resolvedPath}/index.js`));
+    console.log('');
+    console.log(chalk.gray(`To revoke: uomp revoke ${session.sessionId}`));
 
-    const rawScopes = (raw.requested_scopes as Record<string, Record<string, unknown>>) ?? {};
-    const rawAgent = (raw.agent as Record<string, unknown>) ?? {};
-    const rawIdentity = (raw.identity as Record<string, unknown>) ?? undefined;
-
-    return {
-      uompVersion: String(raw.uomp_version ?? '1.0'),
-      agent: {
-        id: String(rawAgent.id ?? ''),
-        name: String(rawAgent.name ?? ''),
-        version: String(rawAgent.version ?? ''),
-        description: rawAgent.description as string | undefined,
-        publisher: rawAgent.publisher as string | undefined,
-      },
-      requestedScopes: {
-        read: scopeAction(rawScopes.read ?? {}),
-        write: scopeAction(rawScopes.write ?? {}),
-      },
-      requiredCapabilities: raw.required_capabilities as string[] | undefined,
-      optionalCapabilities: raw.optional_capabilities as string[] | undefined,
-      requiresRemote: Boolean(raw.requires_remote),
-      identity: rawIdentity
-        ? {
-            did: rawIdentity.did as string | undefined,
-            verificationMethods: rawIdentity.verification_methods as string[] | undefined,
-            proof: rawIdentity.proof
-              ? {
-                  type: String((rawIdentity.proof as Record<string, unknown>).type ?? ''),
-                  created: String((rawIdentity.proof as Record<string, unknown>).created ?? ''),
-                  proofValue: String((rawIdentity.proof as Record<string, unknown>).proofValue ?? ''),
-                }
-              : undefined,
-          }
-        : undefined,
-    };
+    // Start Auth + Guard server so the Agent can connect unless disabled
+    if (options.server !== false) {
+      this.startServer();
+    }
   }
 
   private async promptForScopes(manifest: AgentManifest, additionalScopes: string[]): Promise<Scopes> {
@@ -145,6 +127,29 @@ export class AuthorizeCommands {
       };
     }
 
+    console.log(chalk.bold(`\nAgent "${manifest.agent.name}" requests access to:`));
+    console.log(`Description: ${manifest.agent.description ?? 'No description'}`);
+    console.log(`Publisher: ${manifest.agent.publisher ?? 'Unknown'}`);
+
+    // Tag-level exposure summary
+    for (const tag of readTags) {
+      const sensitivity = this.inferSensitivity(tag);
+      const levelLabel = sensitivity === 'high' ? chalk.red('high') : sensitivity === 'medium' ? chalk.yellow('medium') : chalk.green('low');
+      console.log(`  [${levelLabel}] ${tag}`);
+
+      // Field-level summary for high sensitivity tags
+      if (sensitivity === 'high') {
+        const fields = manifest.requestedScopes.read.fields?.[tag];
+        const purpose = manifest.requestedScopes.read.purposes?.[tag];
+        if (fields && fields.length > 0) {
+          console.log(`      Fields: ${fields.join(', ')}`);
+        }
+        if (purpose) {
+          console.log(`      Purpose: ${purpose}`);
+        }
+      }
+    }
+
     const { selectedTags } = await inquirer.prompt([
       {
         type: 'checkbox',
@@ -155,13 +160,40 @@ export class AuthorizeCommands {
       },
     ]);
 
+    // For high sensitivity tags, ask whether to redact fields
+    const redactedTags: string[] = [];
+    for (const tag of selectedTags as string[]) {
+      if (this.inferSensitivity(tag) === 'high') {
+        const fields = manifest.requestedScopes.read.fields?.[tag];
+        if (fields && fields.length > 0) {
+          const { redact } = await inquirer.prompt([
+            {
+              type: 'confirm',
+              name: 'redact',
+              message: `${tag} is high sensitivity. Only expose minimal fields?`,
+              default: false,
+            },
+          ]);
+          if (redact) {
+            redactedTags.push(tag);
+          }
+        }
+      }
+    }
+
+    // Build final read scope
+    const readScope: ScopeAction = {
+      tags: selectedTags as string[],
+      keys: manifest.requestedScopes.read.keys ?? [],
+      denyTags: manifest.requestedScopes.read.denyTags ?? [],
+      denyKeys: manifest.requestedScopes.read.denyKeys ?? [],
+    };
+
+    // High sensitivity items require key-level authorization
+    this.addHighSensitivityKeys(readScope, selectedTags as string[]);
+
     return {
-      read: {
-        tags: selectedTags as string[],
-        keys: manifest.requestedScopes.read.keys ?? [],
-        denyTags: manifest.requestedScopes.read.denyTags ?? [],
-        denyKeys: manifest.requestedScopes.read.denyKeys ?? [],
-      },
+      read: readScope,
       write: {
         tags: [],
         keys: [],
@@ -169,5 +201,59 @@ export class AuthorizeCommands {
         denyKeys: [],
       },
     };
+  }
+
+  private buildScopesFromTags(manifest: AgentManifest, tags: string[]): Scopes {
+    const readScope: ScopeAction = {
+      tags,
+      keys: manifest.requestedScopes.read.keys ?? [],
+      denyTags: manifest.requestedScopes.read.denyTags ?? [],
+      denyKeys: manifest.requestedScopes.read.denyKeys ?? [],
+    };
+    this.addHighSensitivityKeys(readScope, tags);
+    return {
+      read: readScope,
+      write: {
+        tags: [],
+        keys: [],
+        denyTags: [],
+        denyKeys: [],
+      },
+    };
+  }
+
+  private addHighSensitivityKeys(scope: ScopeAction, tags: string[]): void {
+    // High sensitivity items cannot be authorized by tag alone; explicitly include their keys.
+    for (const tag of tags) {
+      if (this.inferSensitivity(tag) === 'high') {
+        const items = this.store.getByTag(tag);
+        for (const item of items) {
+          if (!scope.keys.includes(item.key)) {
+            scope.keys.push(item.key);
+          }
+        }
+      }
+    }
+  }
+
+  private inferSensitivity(tag: string): Sensitivity {
+    if (tag.includes('holdings') || tag.includes('transactions')) return 'high';
+    if (tag.startsWith('profile:') || tag.includes('watchlist')) return 'medium';
+    return 'low';
+  }
+
+  private startServer(): void {
+    const authApp = this.authService.getApp();
+    const guardApp = this.guard.getApp();
+    const combined = authApp;
+    combined.route('/', guardApp);
+
+    serve({
+      fetch: combined.fetch,
+      port: this.config.port,
+      hostname: this.config.host,
+    });
+
+    console.log(chalk.gray(`UOMP server listening on ${this.config.serverUrl}`));
   }
 }

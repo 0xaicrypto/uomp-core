@@ -1,0 +1,11 @@
+{
+  "key": "user-risk-profile",
+  "value": {
+    "risk_level": "moderate",
+    "max_drawdown": 0.2,
+    "investment_horizon": "5_years"
+  },
+  "tags": ["profile:risk"],
+  "sensitivity": "medium",
+  "source": "user"
+}

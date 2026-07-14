@@ -18,6 +18,9 @@ dist/
 npm-debug.log*
 pnpm-debug.log*
 
+# Example outputs
+output/
+
 # Editor
 .vscode/
 .idea/

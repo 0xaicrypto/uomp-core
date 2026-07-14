@@ -1,0 +1,34 @@
+{
+  "uomp_version": "1.0",
+  "agent": {
+    "id": "stock-analyst",
+    "name": "持仓分析助手",
+    "version": "0.1.0",
+    "description": "基于持仓和市场公开信息生成投资策略分析",
+    "publisher": "uomp-community"
+  },
+  "requested_scopes": {
+    "read": {
+      "tags": ["portfolio:holdings", "portfolio:watchlist", "profile:risk"],
+      "keys": [],
+      "deny_tags": [],
+      "deny_keys": [],
+      "fields": {
+        "portfolio:holdings": ["symbol", "quantity", "cost_basis", "market_value"]
+      },
+      "purposes": {
+        "portfolio:holdings": "计算仓位权重、行业分布和盈亏分析"
+      }
+    },
+    "write": {
+      "tags": [],
+      "keys": [],
+      "deny_tags": [],
+      "deny_keys": []
+    }
+  },
+  "required_capabilities": ["memory.read"],
+  "optional_capabilities": [],
+  "requires_remote": false,
+  "external_data_sources": ["yahoo-finance"]
+}

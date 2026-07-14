@@ -284,6 +284,63 @@ export class MemoryGuard {
     );
   }
 
+  getAuditLogs(options: { sessionId?: string; agentId?: string; limit?: number } = {}): AuditLogEntry[] {
+    let sql = 'SELECT * FROM audit_logs WHERE 1=1';
+    const params: (string | number)[] = [];
+    if (options.sessionId) {
+      sql += ' AND session_id = ?';
+      params.push(options.sessionId);
+    }
+    if (options.agentId) {
+      sql += ' AND agent_id = ?';
+      params.push(options.agentId);
+    }
+    sql += ' ORDER BY timestamp DESC';
+    if (options.limit) {
+      sql += ' LIMIT ?';
+      params.push(options.limit);
+    }
+
+    const rows = this.db.prepare(sql).all(...params) as Array<{
+      id: string;
+      timestamp: string;
+      session_id: string;
+      agent_id: string;
+      action: string;
+      key: string | null;
+      tags: string | null;
+      allowed: number;
+      reason: string;
+    }>;
+
+    return rows.map(row => ({
+      id: row.id,
+      timestamp: row.timestamp,
+      sessionId: row.session_id,
+      agentId: row.agent_id,
+      action: row.action as AuditLogEntry['action'],
+      key: row.key ?? undefined,
+      tags: row.tags ? JSON.parse(row.tags) : undefined,
+      allowed: Boolean(row.allowed),
+      reason: row.reason,
+    }));
+  }
+
+  getLastAccessForSession(sessionId: string): { timestamp?: string; action?: string; endpoint?: string } | null {
+    const row = this.db.prepare('SELECT timestamp, action, key, tags FROM audit_logs WHERE session_id = ? ORDER BY timestamp DESC LIMIT 1').get(sessionId) as {
+      timestamp: string;
+      action: string;
+      key: string | null;
+      tags: string | null;
+    } | undefined;
+    if (!row) return null;
+    return {
+      timestamp: row.timestamp,
+      action: row.action,
+      endpoint: row.key ?? (row.tags ? JSON.parse(row.tags)[0] : undefined),
+    };
+  }
+
   close(): void {
     this.db.close();
     this.store.close();

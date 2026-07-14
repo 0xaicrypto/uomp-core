@@ -33,6 +33,8 @@ export interface ScopeAction {
   keys: string[];
   denyTags: string[];
   denyKeys: string[];
+  fields?: Record<string, string[]>;
+  purposes?: Record<string, string>;
 }
 
 export interface Scopes {
@@ -53,6 +55,7 @@ export interface AgentManifest {
   requiredCapabilities?: string[];
   optionalCapabilities?: string[];
   requiresRemote?: boolean;
+  externalDataSources?: string[];
   identity?: AgentIdentity;
 }
 

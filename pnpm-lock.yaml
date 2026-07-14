@@ -46,6 +46,12 @@ importers:
         specifier: workspace:*
         version: link:../../packages/sdk
 
+  examples/stock-analyst:
+    dependencies:
+      '@uomp/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+
   packages/auth:
     dependencies:
       '@uomp/core':
@@ -109,6 +115,9 @@ importers:
       commander:
         specifier: ^12.1.0
         version: 12.1.0
+      csv-parse:
+        specifier: ^7.0.1
+        version: 7.0.1
       inquirer:
         specifier: ^10.0.0
         version: 10.2.2
@@ -406,6 +415,9 @@ packages:
 
   cross-fetch@4.1.0:
     resolution: {integrity: sha512-uKm5PU+MHTootlWEY+mZ4vvXoCn4fLQxT9dSc1sXVMSFkINTJVN8cAQROpwcKm8bJ/c7rgZVIBWzH5T78sNZZw==}
+
+  csv-parse@7.0.1:
+    resolution: {integrity: sha512-+2z7Ar0APQ7Uu6fX4cn+pitRmxjZ1WPBcGmZFKmA74FCyi7Et/XZx8cjNQ5CjbZ4HCOxXCOpRBYvYH08Qa003A==}
 
   decompress-response@6.0.0:
     resolution: {integrity: sha512-aW35yZM6Bb/4oJlZncMH2LCoZtJXTRxES17vE3hoRiowU2kWHaJKFkSBDnDR+cm9J+9QhXmREyIfv0pji9ejCQ==}
@@ -869,6 +881,8 @@ snapshots:
       node-fetch: 2.7.0
     transitivePeerDependencies:
       - encoding
+
+  csv-parse@7.0.1: {}
 
   decompress-response@6.0.0:
     dependencies:

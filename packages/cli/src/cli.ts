@@ -5,8 +5,12 @@ import { UompConfig } from './config.js';
 import { MemoryCommands } from './commands/memory.js';
 import { RegistryCommands } from './commands/registry.js';
 import { RunCommands } from './commands/run.js';
-import { SessionCommands } from './commands/session.js';
+import { SessionsCommands } from './commands/sessions.js';
+import { AuditCommands } from './commands/audit.js';
 import { AuthorizeCommands } from './commands/authorize.js';
+import { DiscoverCommands } from './commands/discover.js';
+import { ConnectCommands } from './commands/connect.js';
+import { ImportCommands } from './commands/import.js';
 
 const program = new Command();
 
@@ -33,38 +37,100 @@ program
   .addCommand(MemoryCommands.deleteCmd())
   .addCommand(MemoryCommands.importCmd());
 
+// New generic import command (supersedes memory import for external data)
+program.addCommand(ImportCommands.get());
+
 program
   .command('registry')
   .description('Agent registry operations')
   .addCommand(RegistryCommands.search())
+  .addCommand(RegistryCommands.list())
+  .addCommand(RegistryCommands.add())
+  .addCommand(RegistryCommands.remove())
   .addCommand(RegistryCommands.install());
 
 program
+  .command('discover <agent>')
+  .description('Discover an agent from a local path or registry://<id>')
+  .action(async (agent: string) => {
+    const config = new UompConfig();
+    await config.init();
+    const discover = new DiscoverCommands(config);
+    await discover.discover(agent);
+  });
+
+program
+  .command('connect <agent>')
+  .description('Connect to an agent: verify identity, checksum, and cache manifest')
+  .action(async (agent: string) => {
+    const config = new UompConfig();
+    await config.init();
+    const connect = new ConnectCommands(config);
+    await connect.connect(agent);
+  });
+
+program
   .command('authorize <agent>')
-  .description('Authorize an agent and print the capability token (standard mode: agent runs independently)')
+  .description('Authorize an agent and output the capability token')
   .option('-s, --scope <scopes...>', 'Additional read scopes (tags)')
-  .action(async (agent: string, options: { scope?: string[] }) => {
+  .option('-o, --output <file>', 'Save token environment variables to file')
+  .option('-d, --duration <minutes>', 'Session duration in minutes', '30')
+  .option('--no-server', 'Do not start the local Auth + Guard server')
+  .action(async (agent: string, options: { scope?: string[]; output?: string; duration?: string; server?: boolean }) => {
     const config = new UompConfig();
     await config.init();
     const authorizer = new AuthorizeCommands(config);
-    await authorizer.authorize(agent, options.scope ?? []);
+    await authorizer.authorize(agent, options);
   });
 
 program
-  .command('run <agent>')
-  .description('Run an agent as a child process with authorization (local development shortcut)')
-  .option('-s, --scope <scopes...>', 'Additional read scopes (tags)')
-  .action(async (agent: string, options: { scope?: string[] }) => {
-    const config = new UompConfig();
-    await config.init();
-    const runner = new RunCommands(config);
-    await runner.run(agent, options.scope ?? []);
+  .command('sessions')
+  .description('List active sessions')
+  .option('-a, --all', 'Include closed sessions')
+  .action(async (options: { all?: boolean }) => {
+    // Reuse the list command action manually
+    const cmd = SessionsCommands.list();
+    await cmd.parseAsync(['node', 'uomp', 'list', ...(options.all ? ['--all'] : [])]);
   });
 
 program
-  .command('session')
-  .description('Manage active sessions')
-  .addCommand(SessionCommands.list())
-  .addCommand(SessionCommands.revoke());
+  .command('revoke <sessionId>')
+  .description('Revoke a session')
+  .action(async (sessionId: string) => {
+    const cmd = SessionsCommands.revoke();
+    await cmd.parseAsync(['node', 'uomp', 'revoke', sessionId]);
+  });
+
+program
+  .command('audit')
+  .description('View audit logs')
+  .option('-s, --session <sessionId>', 'Filter by session ID')
+  .option('-a, --agent <agentId>', 'Filter by agent ID')
+  .option('-l, --limit <number>', 'Limit number of results', '50')
+  .action(async (options: { session?: string; agent?: string; limit?: string }) => {
+    const cmd = AuditCommands.list();
+    await cmd.parseAsync([
+      'node',
+      'uomp',
+      'list',
+      ...(options.session ? ['--session', options.session] : []),
+      ...(options.agent ? ['--agent', options.agent] : []),
+      ...(options.limit ? ['--limit', options.limit] : []),
+    ]);
+  });
+
+program
+  .command('agent')
+  .description('Agent developer commands')
+  .addCommand(new Command('run')
+    .description('Run an agent as a child process (developer shortcut)')
+    .argument('<agent>', 'Agent path')
+    .option('-s, --scope <scopes...>', 'Additional read scopes')
+    .action(async (agent: string, options: { scope?: string[] }) => {
+      const config = new UompConfig();
+      await config.init();
+      const runner = new RunCommands(config);
+      await runner.run(agent, options.scope ?? []);
+    }));
 
 program.parse();
