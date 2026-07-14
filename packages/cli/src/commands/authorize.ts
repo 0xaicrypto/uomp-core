@@ -1,4 +1,5 @@
 import { resolve } from 'path';
+import net from 'net';
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import { serve } from '@hono/node-server';
@@ -108,7 +109,7 @@ export class AuthorizeCommands {
 
     // Start Auth + Guard server so the Agent can connect unless disabled
     if (options.server !== false) {
-      this.startServer();
+      await this.startServer();
     }
   }
 
@@ -159,27 +160,6 @@ export class AuthorizeCommands {
         default: manifest.requestedScopes.read.tags,
       },
     ]);
-
-    // For high sensitivity tags, ask whether to redact fields
-    const redactedTags: string[] = [];
-    for (const tag of selectedTags as string[]) {
-      if (this.inferSensitivity(tag) === 'high') {
-        const fields = manifest.requestedScopes.read.fields?.[tag];
-        if (fields && fields.length > 0) {
-          const { redact } = await inquirer.prompt([
-            {
-              type: 'confirm',
-              name: 'redact',
-              message: `${tag} is high sensitivity. Only expose minimal fields?`,
-              default: false,
-            },
-          ]);
-          if (redact) {
-            redactedTags.push(tag);
-          }
-        }
-      }
-    }
 
     // Build final read scope
     const readScope: ScopeAction = {
@@ -242,18 +222,40 @@ export class AuthorizeCommands {
     return 'low';
   }
 
-  private startServer(): void {
+  private async startServer(): Promise<void> {
+    const isAvailable = await this.isPortAvailable(this.config.port, this.config.host);
+    if (!isAvailable) {
+      console.log(chalk.yellow(`A server is already listening on ${this.config.serverUrl}.`));
+      console.log(chalk.gray('Skipping embedded server startup; the Agent can use the existing one.'));
+      return;
+    }
+
     const authApp = this.authService.getApp();
     const guardApp = this.guard.getApp();
     const combined = authApp;
     combined.route('/', guardApp);
 
-    serve({
+    const server = serve({
       fetch: combined.fetch,
       port: this.config.port,
       hostname: this.config.host,
     });
 
+    server.on('error', (err: Error) => {
+      console.log(chalk.yellow(`Failed to start embedded server: ${err.message}`));
+    });
+
     console.log(chalk.gray(`UOMP server listening on ${this.config.serverUrl}`));
+  }
+
+  private isPortAvailable(port: number, host: string): Promise<boolean> {
+    return new Promise(resolve => {
+      const tester = net.createServer();
+      tester.once('error', () => resolve(false));
+      tester.once('listening', () => {
+        tester.close(() => resolve(true));
+      });
+      tester.listen(port, host);
+    });
   }
 }
