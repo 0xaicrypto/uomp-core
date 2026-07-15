@@ -400,9 +400,11 @@ uomp-mvp/
 │   ├── sdk/           # Agent TypeScript SDK
 │   └── cli/           # uomp 命令行工具
 ├── apps/
-│   └── server/        # Auth + Guard 组合服务
+│   ├── server/        # Auth + Guard 组合服务
+│   └── gateway/       # 远程授权 Gateway（mTLS + Token 中继）
 ├── examples/
-│   └── calendar-agent/# 示例 Agent
+│   ├── calendar-agent/# 示例 Agent
+│   └── stock-analyst/ # 股票分析 Agent（多维分析）
 └── specs/
     └── draft-00.md    # 协议规范
 ```
