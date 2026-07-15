@@ -1,0 +1,22 @@
+name: uomp-stock-analyst
+region: nyc
+services:
+  - name: api
+    dockerfile_path: examples/stock-analyst/Dockerfile
+    source_dir: .
+    github:
+      branch: main
+      deploy_on_push: true
+      repo: 0xaicrypto/uomp-core
+    http_port: 3080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    routes:
+      - path: /
+    envs:
+      - key: FINNHUB_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: ""
+    health_check:
+      http_path: /health
