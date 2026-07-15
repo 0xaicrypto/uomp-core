@@ -42,6 +42,14 @@ export interface RawAgentManifest {
     source_url?: string;
   };
   external_data_sources?: string[];
+  data_retention_policy?: {
+    max_retention_seconds?: number;
+    deletion_method?: string;
+    proof_required?: boolean;
+    description?: string;
+    third_party_sharing?: boolean;
+    encryption_at_rest?: boolean;
+  };
 }
 
 export function normalizeManifest(raw: RawAgentManifest): AgentManifest {
@@ -74,6 +82,14 @@ export function normalizeManifest(raw: RawAgentManifest): AgentManifest {
     optionalCapabilities: raw.optional_capabilities,
     requiresRemote: Boolean(raw.requires_remote),
     externalDataSources: raw.external_data_sources,
+    dataRetentionPolicy: raw.data_retention_policy ? {
+      maxRetentionSeconds: raw.data_retention_policy.max_retention_seconds ?? 0,
+      deletionMethod: (raw.data_retention_policy.deletion_method as 'process_termination' | 'secure_wipe' | 'ephemeral_storage') ?? 'process_termination',
+      proofRequired: raw.data_retention_policy.proof_required ?? false,
+      description: raw.data_retention_policy.description,
+      thirdPartySharing: raw.data_retention_policy.third_party_sharing ?? false,
+      encryptionAtRest: raw.data_retention_policy.encryption_at_rest ?? false,
+    } : undefined,
     identity: raw.identity
       ? {
           did: raw.identity.did,

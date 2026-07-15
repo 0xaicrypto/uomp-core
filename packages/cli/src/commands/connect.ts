@@ -71,6 +71,12 @@ export class ConnectCommands {
     console.log(`  Medium sensitivity tags: ${risk.medium}`);
     console.log(`  External data sources: ${manifest.externalDataSources?.length ?? 0}`);
     console.log(`  Write permissions: ${manifest.requestedScopes.write.tags.length > 0 ? chalk.red('yes') : chalk.green('none')}`);
+    if (manifest.dataRetentionPolicy) {
+      const rp = manifest.dataRetentionPolicy;
+      const rLabel = rp.maxRetentionSeconds === 0 ? chalk.green('zero retention') : chalk.yellow(`${rp.maxRetentionSeconds}s`);
+      console.log(`  Data retention: ${rLabel} (${rp.deletionMethod})`);
+      if (rp.thirdPartySharing) console.log(`  Third-party sharing: ${chalk.red('yes')}`);
+    }
     console.log(`  Overall risk: ${this.riskLabel(risk.level)}`);
 
     // Cache manifest

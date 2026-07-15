@@ -90,7 +90,7 @@ program
   .action(async (options: { all?: boolean }) => {
     // Reuse the list command action manually
     const cmd = SessionsCommands.list();
-    await cmd.parseAsync(['node', 'uomp', 'list', ...(options.all ? ['--all'] : [])]);
+    await cmd.parseAsync(['node', 'uomp', ...(options.all ? ['--all'] : [])]);
   });
 
 program
@@ -98,7 +98,7 @@ program
   .description('Revoke a session')
   .action(async (sessionId: string) => {
     const cmd = SessionsCommands.revoke();
-    await cmd.parseAsync(['node', 'uomp', 'revoke', sessionId]);
+    await cmd.parseAsync(['node', 'uomp', sessionId]);
   });
 
 program
@@ -112,7 +112,6 @@ program
     await cmd.parseAsync([
       'node',
       'uomp',
-      'list',
       ...(options.session ? ['--session', options.session] : []),
       ...(options.agent ? ['--agent', options.agent] : []),
       ...(options.limit ? ['--limit', options.limit] : []),

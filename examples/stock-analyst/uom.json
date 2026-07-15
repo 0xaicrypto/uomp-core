@@ -30,5 +30,12 @@
   "required_capabilities": ["memory.read"],
   "optional_capabilities": [],
   "requires_remote": false,
-  "external_data_sources": ["yahoo-finance"]
+  "external_data_sources": ["yahoo-finance"],
+  "data_retention_policy": {
+    "max_retention_seconds": 0,
+    "deletion_method": "process_termination",
+    "proof_required": false,
+    "description": "Agent 进程结束即清除所有数据，不持久化",
+    "third_party_sharing": true
+  }
 }

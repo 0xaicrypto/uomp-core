@@ -33,6 +33,22 @@ const createSessionSchema = z.object({
 
 const grantSessionSchema = z.object({
   granted_scopes: z.custom<Scopes>(),
+  profile: z.string().optional(),
+  audience: z.string().optional(),
+  allowed_fields: z.array(z.string()).optional(),
+  aggregation_only: z.boolean().optional(),
+  task_bound: z.boolean().optional(),
+});
+
+const deletionProofSchema = z.object({
+  deletion_proof_id: z.string(),
+  session_id: z.string(),
+  agent_id: z.string(),
+  deleted_at: z.string(),
+  memory_hash: z.string(),
+  fields_accessed: z.array(z.string()).optional(),
+  method: z.string(),
+  proof_value: z.string(),
 });
 
 export class AuthService {
@@ -104,7 +120,13 @@ export class AuthService {
         return c.json({ error: { code: 'INVALID_REQUEST', message: parsed.error.message } }, 400);
       }
 
-      const result = await this.grantSession(sessionId, parsed.data.granted_scopes);
+      const result = await this.grantSession(sessionId, parsed.data.granted_scopes, {
+        profile: parsed.data.profile,
+        audience: parsed.data.audience,
+        allowedFields: parsed.data.allowed_fields,
+        aggregationOnly: parsed.data.aggregation_only,
+        taskBound: parsed.data.task_bound,
+      });
       if (!result) {
         return c.json({ error: { code: 'SESSION_NOT_FOUND', message: 'Session not found or not in created state' } }, 404);
       }
@@ -150,6 +172,33 @@ export class AuthService {
       }
     });
 
+    app.post('/v1/sessions/:id/deletion-proof', async c => {
+      const sessionId = c.req.param('id');
+      const body = await c.req.json();
+      const parsed = deletionProofSchema.safeParse(body);
+      if (!parsed.success) {
+        return c.json({ error: { code: 'INVALID_REQUEST', message: parsed.error.message } }, 400);
+      }
+
+      const proof = parsed.data;
+      if (proof.session_id !== sessionId) {
+        return c.json({ error: { code: 'INVALID_REQUEST', message: 'session_id mismatch' } }, 400);
+      }
+
+      const row = this.db.prepare('SELECT * FROM sessions WHERE session_id = ?').get(sessionId) as Record<string, string> | undefined;
+      if (!row) {
+        return c.json({ error: { code: 'SESSION_NOT_FOUND', message: 'Session not found' } }, 404);
+      }
+
+      // Close the session if task_bound (or always close on deletion proof)
+      this.db.prepare(`
+        UPDATE sessions SET status = 'closed', closed_at = ?
+        WHERE session_id = ? AND status = 'active'
+      `).run(new Date().toISOString(), sessionId);
+
+      return c.json({ status: 'accepted', deletion_proof_id: proof.deletion_proof_id });
+    });
+
     return app;
   }
 
@@ -187,13 +236,19 @@ export class AuthService {
     return session;
   }
 
-  async grantSession(sessionId: string, grantedScopes: Scopes): Promise<{ token: string; expiresAt: string } | null> {
+  async grantSession(
+    sessionId: string,
+    grantedScopes: Scopes,
+    options?: { profile?: string; audience?: string; allowedFields?: string[]; aggregationOnly?: boolean; taskBound?: boolean }
+  ): Promise<{ token: string; expiresAt: string } | null> {
     const row = this.db.prepare('SELECT * FROM sessions WHERE session_id = ?').get(sessionId) as Record<string, string> | undefined;
     if (!row || row.status !== 'created') {
       return null;
     }
 
     const expiresAt = new Date(row.expires_at);
+    const profile = options?.profile ?? 'local';
+    const audience = options?.audience ?? (profile === 'remote' ? undefined : `http://127.0.0.1:9374`);
     const payload: CapabilityTokenPayload = {
       version: '1.0',
       sessionId,
@@ -201,9 +256,12 @@ export class AuthService {
       issuedAt: new Date().toISOString(),
       expiresAt: expiresAt.toISOString(),
       scopes: grantedScopes,
-      profile: 'local',
-      audience: `http://127.0.0.1:9374`,
+      profile,
+      audience,
       limits: { maxReadQueries: 100, maxWriteQueries: 0 },
+      allowedFields: options?.allowedFields,
+      aggregationOnly: options?.aggregationOnly ?? false,
+      taskBound: options?.taskBound ?? false,
     };
 
     const token = await this.issuer.issue(payload);

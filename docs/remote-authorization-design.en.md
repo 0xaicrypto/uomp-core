@@ -1,6 +1,6 @@
 # UOMP Remote Authorization Design Document
 
-> Status: Draft
+> Status: Phase 1 implemented (uomp-mvp `apps/gateway`)
 > Objective: Define the secure authorization, communication, and payload delivery mechanism between a user's local Memory and a remote Agent.
 
 ---
@@ -77,6 +77,28 @@ Key principles:
 - **Memory Guard is not directly exposed to the public internet**; the Gateway is the only external entry point.
 - **The audience of the Capability Token is the Gateway**, not the Memory Guard.
 - **Payloads must be end-to-end encrypted**; the Relay stores only ciphertext.
+
+### 3.1 Quick Validation
+
+`uomp-mvp` already ships with a runnable Gateway reference implementation:
+
+```bash
+# 1. Make sure the local Auth + Guard service is running
+pnpm --filter @uomp/server start
+
+# 2. Generate CA / Gateway server cert / client cert
+./scripts/generate-gateway-certs.sh
+
+# 3. Add the client fingerprint to ~/.uomp/remote-profile.json agent_allowlist
+
+# 4. Start the Gateway
+node apps/gateway/dist/index.js
+
+# 5. Create a remote session and run the end-to-end smoke test
+./scripts/test-gateway-remote.sh
+```
+
+The current Gateway supports: mTLS termination, remote Token validation, Memory Guard forwarding, `/v1/audit` queries, and temporary Payload caching (unencrypted; Phase 2 adds E2E encryption).
 
 ---
 
@@ -371,15 +393,16 @@ Local Events ──► Batch Aggregation ──► Merkle root ──► Starkne
 
 ## 8. Interface Draft
 
-### 8.1 Gateway HTTP API
+### 8.1 Gateway HTTP API (Phase 1 implemented)
 
 ```http
 GET  /v1/health
-POST /v1/sessions/{session_id}/access
 GET  /v1/memory/{key}              # Forward to Memory Guard
 GET  /v1/memory?tag={tag}          # Forward to Memory Guard
-POST /v1/payload/upload            # Agent uploads encrypted Payload
-GET  /v1/payload/{payload_id}      # User downloads encrypted Payload
+GET  /v1/audit                     # Forward to Memory Guard audit endpoint
+POST /v1/payload/upload            # Agent uploads Payload (Phase 2 adds E2E encryption)
+GET  /v1/payload/{payload_id}      # User downloads Payload
+POST /v1/sessions/{session_id}/refresh  # Token refresh (reserved, not implemented)
 ```
 
 All requests must carry:
@@ -406,13 +429,14 @@ await agent.output.upload(report, { encryptTo: remoteProfile.encryption.public_k
 
 ## 9. MVP Scope Recommendation
 
-### Phase 1: Gateway + mTLS (3–4 weeks)
+### Phase 1: Gateway + mTLS ✅ Completed
 
 - Finalize Remote Profile schema
-- Gateway reference implementation (Node.js / TypeScript)
+- Gateway reference implementation (Node.js / TypeScript, `apps/gateway`)
 - mTLS mutual authentication
 - Token validation and Memory Guard forwarding
-- Basic audit logging
+- Basic audit logging (via `/v1/audit`)
+- Scripts: `scripts/generate-gateway-certs.sh`, `scripts/test-gateway-remote.sh`
 
 ### Phase 2: E2E Payload (2 weeks)
 
