@@ -40,8 +40,8 @@ If the CLI/SDK can support the stock analysis agent well, agents for other scena
 5. He uses uomp authorize to authorize stock-analyst to read positions and risk profile.
 6. The CLI gives him an export UOM_TOKEN=... command.
 7. Xiao Wang copies this command into the terminal running the Agent.
-   - Phase 1 examples usually run the Agent on the local machine, but the CLI/SDK design does not assume the Agent and user must be on the same machine.
-   - If the Agent runs on a remote server, the user needs to copy UOM_TOKEN and UOMP_BASE_URL to the remote environment and ensure the remote environment can access Memory Guard.
+   - Phase 1 examples usually run the Agent on the local machine, but the CLI/SDK design does not assume the Agent and user must be the same machine.
+   - If the Agent runs on a remote server, the user can expose the Memory Guard via `apps/gateway`; the Token's `audience` points to the Gateway endpoint and `UOMP_BASE_URL` matches the Gateway URL.
 8. After the Agent starts:
       - Reads portfolio:holdings and profile:risk through the SDK
       - Calls Yahoo Finance / Alpha Vantage through the SDK to obtain public data
@@ -119,8 +119,8 @@ Breaking down the user story above yields the following requirements:
 
 - Token delivery is location-agnostic: the CLI only outputs `UOM_TOKEN` and `UOMP_BASE_URL`; the user can copy them to any terminal or environment running the Agent.
 - `UOMP_BASE_URL` defaults to `http://127.0.0.1:9374`, but the user can configure it as a remote Guard endpoint.
-- In remote scenarios, the user is responsible for exposing Memory Guard to the Agent (e.g., via reverse tunnel, self-hosted gateway, or Remote Profile).
-- Phase 1 examples run the Agent on the local machine for convenience, but the protocol and CLI/SDK design do not restrict the Agent's location.
+- In remote scenarios, the user can self-host `apps/gateway` (mTLS + Token forwarding) to securely expose the local Memory Guard to remote Agents; helper scripts are `scripts/generate-gateway-certs.sh` and `scripts/test-gateway-remote.sh`.
+- Phase 1 examples run the Agent on the local machine for convenience, but the protocol and CLI/SDK design do not restrict the Agent's location; the remote Gateway reference implementation is already available.
 
 ### 4.3 Gap 2: Import Command Must Be General and Support Field Mapping
 

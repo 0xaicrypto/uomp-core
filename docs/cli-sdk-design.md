@@ -41,7 +41,7 @@
 6. CLI 给他一段 export UOM_TOKEN=... 命令。
 7. 小王把这段命令复制到**运行 Agent 的终端里**。
    - Phase 1 的示例通常在本机运行 Agent，但 CLI/SDK 的设计不假设 Agent 和用户必须在同一台机器上。
-   - 如果 Agent 运行在远程服务器，用户需要把 `UOM_TOKEN` 和 `UOMP_BASE_URL` 复制到远程环境，并确保远程能访问 Memory Guard。
+   - 如果 Agent 运行在远程服务器，用户可通过 `apps/gateway` 暴露 Memory Guard；Token 的 `audience` 指向 Gateway endpoint，`UOMP_BASE_URL` 也对应 Gateway URL。
 8. Agent 启动后：
      - 通过 SDK 读取 portfolio:holdings 和 profile:risk
      - 通过 SDK 调用 Yahoo Finance / Alpha Vantage 获取公开数据
@@ -119,8 +119,8 @@
 
 - Token 交付方式是位置无关的：CLI 只输出 `UOM_TOKEN` 和 `UOMP_BASE_URL`，用户可以把它们复制到任何运行 Agent 的终端或环境中。
 - `UOMP_BASE_URL` 默认是 `http://127.0.0.1:9374`，但用户可以配置为远程 Guard 端点。
-- 远程场景下，用户需要自己负责把 Memory Guard 暴露给 Agent（例如通过反向隧道、自托管网关或 Remote Profile）。
-- Phase 1 示例为方便起见让 Agent 运行在本机，但协议和 CLI/SDK 设计不限制 Agent 位置。
+- 远程场景下，用户可通过 `apps/gateway` 自托管 Gateway（mTLS + Token 转发），把本地 Memory Guard 安全暴露给远程 Agent；相关脚本为 `scripts/generate-gateway-certs.sh` 和 `scripts/test-gateway-remote.sh`。
+- Phase 1 示例为方便起见让 Agent 运行在本机，但协议和 CLI/SDK 设计不限制 Agent 位置；远程 Gateway 参考实现已可用。
 
 ### 4.3 缺口 2：导入命令必须通用且支持字段映射
 

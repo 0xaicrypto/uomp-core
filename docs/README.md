@@ -12,4 +12,4 @@ For the protocol specification, see the [UOMP website/spec](https://www.uomp.org
 | Remote Authorization Design | [`remote-authorization-design.md`](./remote-authorization-design.md) | [`remote-authorization-design.en.md`](./remote-authorization-design.en.md) |
 
 - **CLI/SDK Design**: Using the stock analyst Agent as the primary acceptance example.
-- **Remote Authorization Design**: Gateway, token refresh, payload encryption, DIDComm migration, and on-chain audit anchoring.
+- **Remote Authorization Design**: Gateway, token refresh, payload encryption, DIDComm migration, and on-chain audit anchoring. **Phase 1 (Gateway + mTLS) is implemented in `apps/gateway`**.
