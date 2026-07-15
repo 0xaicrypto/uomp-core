@@ -33,8 +33,29 @@ export interface ScopeAction {
   keys: string[];
   denyTags: string[];
   denyKeys: string[];
+  allowedFields?: string[];
   fields?: Record<string, string[]>;
   purposes?: Record<string, string>;
+}
+
+export interface DataRetentionPolicy {
+  maxRetentionSeconds: number;
+  deletionMethod: 'process_termination' | 'secure_wipe' | 'ephemeral_storage';
+  proofRequired?: boolean;
+  description?: string;
+  thirdPartySharing?: boolean;
+  encryptionAtRest?: boolean;
+}
+
+export interface DataDeletionProof {
+  deletionProofId: string;
+  sessionId: string;
+  agentId: string;
+  deletedAt: string;
+  memoryHash: string;
+  fieldsAccessed?: string[];
+  method: string;
+  proofValue: string;
 }
 
 export interface Scopes {
@@ -56,6 +77,7 @@ export interface AgentManifest {
   optionalCapabilities?: string[];
   requiresRemote?: boolean;
   externalDataSources?: string[];
+  dataRetentionPolicy?: DataRetentionPolicy;
   identity?: AgentIdentity;
 }
 
@@ -74,7 +96,7 @@ export interface AuditLogEntry {
   timestamp: string;
   sessionId: string;
   agentId: string;
-  action: 'read' | 'write' | 'delete' | 'query';
+  action: 'read' | 'write' | 'delete' | 'query' | 'deletion_proof' | 'deletion_proof_missing';
   key?: string;
   tags?: string[];
   allowed: boolean;

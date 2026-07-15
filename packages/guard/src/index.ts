@@ -66,6 +66,54 @@ export class MemoryGuard {
   private createApp(): Hono {
     const app = new Hono();
 
+    app.get('/v1/memory/aggregate', async c => {
+      const tag = c.req.query('tag');
+      const op = c.req.query('op');
+      const field = c.req.query('field');
+      const authHeader = c.req.header('authorization');
+
+      const validation = await this.validateRequest(authHeader);
+      if (!validation.valid) {
+        this.logAudit({
+          sessionId: validation.sessionId ?? 'unknown',
+          agentId: validation.agentId ?? 'unknown',
+          action: 'read',
+          tags: tag ? [tag] : undefined,
+          allowed: false,
+          reason: validation.reason,
+        });
+        return c.json({ error: { code: validation.errorCode, message: validation.reason, session_id: validation.sessionId } }, 403);
+      }
+
+      if (!tag) {
+        return c.json({ error: { code: 'INVALID_REQUEST', message: 'tag query parameter is required' } }, 400);
+      }
+
+      if (!op || !['sum', 'avg', 'count', 'min', 'max'].includes(op)) {
+        return c.json({ error: { code: 'INVALID_REQUEST', message: 'op must be sum, avg, count, min, or max' } }, 400);
+      }
+
+      const allowed = this.isTagAllowed(tag, validation.payload!, 'read');
+      this.logAudit({
+        sessionId: validation.payload!.sessionId,
+        agentId: validation.payload!.agentId,
+        action: 'read',
+        tags: [tag],
+        allowed: allowed.allowed,
+        reason: allowed.reason,
+      });
+
+      if (!allowed.allowed) {
+        return c.json({ error: { code: 'ACCESS_DENIED', message: allowed.reason, session_id: validation.payload!.sessionId } }, 403);
+      }
+
+      const items = this.store.getByTag(tag);
+      const filtered = items.filter(item => this.isKeyAllowed(item.key, item, validation.payload!, 'read').allowed);
+
+      const result = this.computeAggregation(filtered, op, field ?? undefined);
+      return c.json(result);
+    });
+
     app.get('/v1/memory/:key', async c => {
       const key = c.req.param('key');
       const authHeader = c.req.header('authorization');
@@ -81,6 +129,10 @@ export class MemoryGuard {
           reason: validation.reason,
         });
         return c.json({ error: { code: validation.errorCode, message: validation.reason, session_id: validation.sessionId } }, 403);
+      }
+
+      if (validation.payload!.aggregationOnly) {
+        return c.json({ error: { code: 'ACCESS_DENIED', message: 'Token only permits aggregation queries' } }, 403);
       }
 
       const item = this.store.get(key);
@@ -99,7 +151,7 @@ export class MemoryGuard {
         return c.json({ error: { code: 'ACCESS_DENIED', message: allowed.reason, session_id: validation.payload!.sessionId } }, 403);
       }
 
-      return c.json(this.serializeItem(item!));
+      return c.json(this.serializeItem(item!, validation.payload!.allowedFields));
     });
 
     app.get('/v1/memory', async c => {
@@ -117,6 +169,10 @@ export class MemoryGuard {
           reason: validation.reason,
         });
         return c.json({ error: { code: validation.errorCode, message: validation.reason, session_id: validation.sessionId } }, 403);
+      }
+
+      if (validation.payload!.aggregationOnly) {
+        return c.json({ error: { code: 'ACCESS_DENIED', message: 'Token only permits aggregation queries' } }, 403);
       }
 
       if (!tag) {
@@ -140,7 +196,7 @@ export class MemoryGuard {
       const items = this.store.getByTag(tag);
       const filtered = items.filter(item => this.isKeyAllowed(item.key, item, validation.payload!, 'read').allowed);
 
-      return c.json({ items: filtered.map(item => this.serializeItem(item)) });
+      return c.json({ items: filtered.map(item => this.serializeItem(item, validation.payload!.allowedFields)) });
     });
 
     app.put('/v1/memory/:key', async c => {
@@ -276,8 +332,8 @@ export class MemoryGuard {
     return { allowed: false, reason: 'Tag not in authorized scope' };
   }
 
-  private serializeItem(item: MemoryItem): Record<string, unknown> {
-    return {
+  private serializeItem(item: MemoryItem, allowedFields?: string[]): Record<string, unknown> {
+    const full: Record<string, unknown> = {
       key: item.key,
       value: item.value,
       tags: item.tags,
@@ -286,9 +342,63 @@ export class MemoryGuard {
       updated_at: item.updatedAt,
       description: item.description,
     };
+
+    if (!allowedFields || allowedFields.length === 0) return full;
+
+    const filtered: Record<string, unknown> = {};
+    for (const field of allowedFields) {
+      if (full[field] !== undefined) {
+        filtered[field] = full[field];
+      }
+    }
+    return filtered;
   }
 
-  private logAudit(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): void {
+  private computeAggregation(items: MemoryItem[], op: string, field?: string): Record<string, unknown> {
+    if (op === 'count') {
+      return { op: 'count', tag: items[0]?.tags[0] ?? '-', result: items.length };
+    }
+
+    if (!field) {
+      return { error: { code: 'INVALID_REQUEST', message: 'field parameter is required for numeric aggregations' } };
+    }
+
+    const path = field.split('.');
+    // strip the "value." prefix if present since we start from item.value
+    const segments = path[0] === 'value' ? path.slice(1) : path;
+    const values: number[] = [];
+    for (const item of items) {
+      let val: unknown = item.value;
+      for (const segment of segments) {
+        if (val && typeof val === 'object') {
+          val = (val as Record<string, unknown>)[segment];
+        } else {
+          val = undefined;
+          break;
+        }
+      }
+      if (typeof val === 'number') {
+        values.push(val);
+      } else if (typeof val === 'string') {
+        const n = parseFloat(val);
+        if (!isNaN(n)) values.push(n);
+      }
+    }
+
+    if (values.length === 0) {
+      return { op, field, result: 0 };
+    }
+
+    switch (op) {
+      case 'sum': return { op, field, result: values.reduce((a, b) => a + b, 0) };
+      case 'avg': return { op, field, result: values.reduce((a, b) => a + b, 0) / values.length };
+      case 'min': return { op, field, result: Math.min(...values) };
+      case 'max': return { op, field, result: Math.max(...values) };
+      default: return { op, field, result: 0 };
+    }
+  }
+
+  private logAudit(entry: { sessionId: string; agentId: string; action: string; key?: string; tags?: string[]; allowed: boolean; reason: string }): void {
     const id = generateId('log');
     const timestamp = new Date().toISOString();
 

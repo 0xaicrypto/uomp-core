@@ -201,7 +201,9 @@ async function main() {
 
   // Forward memory and audit requests to local Memory Guard
   app.all('/v1/memory/*', async c => forwardToGuard(c, config));
+  app.all('/v1/memory/aggregate', async c => forwardToGuard(c, config));
   app.all('/v1/audit/*', async c => forwardToGuard(c, config));
+  app.post('/v1/sessions/:id/deletion-proof', async c => forwardToGuard(c, config));
 
   // Payload upload / download (Phase 2: simple in-memory cache)
   const payloadCache = new Map<string, { data: ArrayBuffer; meta: Record<string, unknown> }>();

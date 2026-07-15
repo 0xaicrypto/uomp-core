@@ -21,6 +21,9 @@ export interface CapabilityTokenPayload {
   profile?: string;
   audience?: string;
   allowedEndpoints?: string[];
+  allowedFields?: string[];
+  aggregationOnly?: boolean;
+  taskBound?: boolean;
 }
 
 export interface TokenLimits {
@@ -120,6 +123,9 @@ export class JWTTokenIssuer implements TokenIssuer {
       profile: payload.profile,
       audience: payload.audience,
       allowed_endpoints: payload.allowedEndpoints,
+      allowed_fields: payload.allowedFields,
+      aggregation_only: payload.aggregationOnly ?? false,
+      task_bound: payload.taskBound ?? false,
     };
   }
 
@@ -135,6 +141,9 @@ export class JWTTokenIssuer implements TokenIssuer {
       profile: (jwt.profile as string | undefined) ?? 'local',
       audience: jwt.audience as string | undefined,
       allowedEndpoints: jwt.allowed_endpoints as string[] | undefined,
+      allowedFields: jwt.allowed_fields as string[] | undefined,
+      aggregationOnly: Boolean(jwt.aggregation_only),
+      taskBound: Boolean(jwt.task_bound),
     };
   }
 }
