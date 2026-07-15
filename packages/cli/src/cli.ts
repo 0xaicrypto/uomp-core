@@ -11,6 +11,7 @@ import { AuthorizeCommands } from './commands/authorize.js';
 import { DiscoverCommands } from './commands/discover.js';
 import { ConnectCommands } from './commands/connect.js';
 import { ImportCommands } from './commands/import.js';
+import { GatewayCommands } from './commands/gateway.js';
 
 const program = new Command();
 
@@ -131,5 +132,11 @@ program
       const runner = new RunCommands(config);
       await runner.run(agent, options.scope ?? []);
     }));
+
+program
+  .command('gateway')
+  .description('Gateway management')
+  .addCommand(GatewayCommands.start())
+  .addCommand(GatewayCommands.status());
 
 program.parse();

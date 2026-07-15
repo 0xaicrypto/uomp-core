@@ -9,6 +9,7 @@ import { PUBLIC_KEY_FILE_NAME } from '@uomp/core';
 import type { JWK } from 'jose';
 import { join } from 'path';
 import { homedir } from 'os';
+import { startTunnel } from './tunnel.js';
 
 interface GatewayConfig {
   port: number;
@@ -21,6 +22,7 @@ interface GatewayConfig {
   audience: string;
   requireMtls: boolean;
   agentAllowlist: string[];
+  tunnel: boolean;
 }
 
 interface RemoteProfile {
@@ -73,6 +75,7 @@ async function loadConfig(): Promise<GatewayConfig> {
     audience,
     requireMtls: profile?.gateway?.tls?.mtls_required ?? true,
     agentAllowlist: profile?.gateway?.agent_allowlist ?? [],
+    tunnel: process.env.UOMP_GATEWAY_TUNNEL === 'true' || process.env.UOMP_GATEWAY_EXPOSE === 'true',
   };
 }
 
@@ -144,9 +147,11 @@ async function main() {
     process.exit(1);
   });
 
+  const audienceRef = { value: config.audience };
+
   const app = new Hono<{ Bindings: Bindings }>();
 
-  app.get('/v1/health', c => c.json({ status: 'ok', audience: config.audience }));
+  app.get('/v1/health', c => c.json({ status: 'ok', audience: audienceRef.value }));
 
   // Token validation middleware
   app.use('/v1/*', async (c, next) => {
@@ -171,7 +176,7 @@ async function main() {
       return c.json({ error: { code: 'INVALID_PROFILE', message: 'Token profile is not remote' } }, 403);
     }
 
-    if (payload.audience && payload.audience !== config.audience) {
+    if (payload.audience && payload.audience !== audienceRef.value) {
       return c.json({ error: { code: 'AUDIENCE_MISMATCH', message: 'Token audience does not match this Gateway' } }, 403);
     }
 
@@ -244,6 +249,30 @@ async function main() {
     console.log(`UOMP Gateway listening on https://${config.host}:${config.port}`);
     console.log(`Forwarding memory requests to ${config.guardUrl}`);
     console.log(`mTLS required: ${config.requireMtls}`);
+
+    // Optionally expose via Cloudflare Tunnel
+    if (config.tunnel) {
+      console.log('');
+      console.log('Starting Cloudflare Tunnel...');
+      startTunnel(config.port, '127.0.0.1')
+        .then(({ url }) => {
+          audienceRef.value = url;
+          config.audience = url;
+          console.log('');
+          console.log('═══ Public Gateway URL ═══');
+          console.log(`  ${url}`);
+          console.log('');
+          console.log(`export UOMP_BASE_URL="${url}"`);
+          console.log('');
+          console.log('Paste this URL into the DO Agent or any remote UOMP client.');
+          console.log('══════════════════════════');
+        })
+        .catch(err => {
+          console.log(`Cloudflare Tunnel unavailable: ${err.message}`);
+          console.log('Install: curl -L -o ~/.local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x ~/.local/bin/cloudflared');
+          console.log('Then restart with UOMP_GATEWAY_TUNNEL=true');
+        });
+    }
   });
 }
 
