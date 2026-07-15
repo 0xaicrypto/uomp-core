@@ -18,7 +18,7 @@ export interface CapabilityTokenPayload {
     maxReadQueries?: number;
     maxWriteQueries?: number;
   };
-  profile?: 'local' | 'remote';
+  profile?: string;
   audience?: string;
   allowedEndpoints?: string[];
 }
@@ -132,7 +132,7 @@ export class JWTTokenIssuer implements TokenIssuer {
       expiresAt: String(jwt.exp ?? ''),
       scopes: jwt.scopes as Scopes,
       limits: jwt.limits as TokenLimits | undefined,
-      profile: (jwt.profile as 'local' | 'remote') ?? 'local',
+      profile: (jwt.profile as string | undefined) ?? 'local',
       audience: jwt.audience as string | undefined,
       allowedEndpoints: jwt.allowed_endpoints as string[] | undefined,
     };

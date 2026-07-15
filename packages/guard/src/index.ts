@@ -181,6 +181,30 @@ export class MemoryGuard {
       return c.json({ error: { code: 'WRITE_NOT_AVAILABLE', message: 'Agent deletes are not available in MVP', session_id: validation.sessionId } }, 503);
     });
 
+    app.get('/v1/audit', async c => {
+      const authHeader = c.req.header('authorization');
+      const sessionId = c.req.query('session_id');
+      const agentId = c.req.query('agent_id');
+      const limit = c.req.query('limit');
+
+      const validation = await this.validateRequest(authHeader);
+      if (!validation.valid) {
+        return c.json({ error: { code: validation.errorCode, message: validation.reason } }, 403);
+      }
+
+      // Agents may only query their own audit trail
+      if (agentId && agentId !== validation.payload!.agentId) {
+        return c.json({ error: { code: 'ACCESS_DENIED', message: 'Cannot query audit for another agent' } }, 403);
+      }
+
+      const logs = this.getAuditLogs({
+        sessionId: sessionId ?? validation.payload!.sessionId,
+        limit: limit ? parseInt(limit, 10) : undefined,
+      });
+
+      return c.json({ logs });
+    });
+
     return app;
   }
 

@@ -53,6 +53,7 @@ Both break user sovereignty. UOMP proposes a third path:
 - **Interactive authorization** — The CLI shows the manifest and lets the user approve a scoped session.
 - **JWT Capability Tokens** — EdDSA-signed tokens bound to a session, injected via `UOM_TOKEN`.
 - **Memory Guard** — Filters every request against the granted scope and logs all access.
+- **Remote Authorization Gateway** — Exposes the Memory Guard over mTLS for remote Agents (e.g. cloud-hosted Agents on a phone or laptop).
 - **Read-only by design in MVP** — Agent writes are gated behind a future staging/approval flow.
 - **Optional identity verification** — DID (`did:ethr`, `did:web`) and GPG support, not enforced in MVP.
 
@@ -144,6 +145,23 @@ pnpm cli run ./examples/calendar-agent
 
 This bundles authorization, Guard startup, and Agent launch into one command.
 
+#### Remote mode via Gateway
+
+Use the Gateway when the Agent runs outside your local machine.
+
+```bash
+# 1. Generate mTLS certificates and a remote profile
+./scripts/generate-gateway-certs.sh
+
+# 2. Start the Gateway
+node apps/gateway/dist/index.js
+
+# 3. Create a remote session and run a smoke test
+./scripts/test-gateway-remote.sh
+```
+
+See `apps/gateway/README.md` for full configuration options.
+
 ### Project structure
 
 ```
@@ -159,7 +177,8 @@ uomp-mvp/
 │   ├── sdk/           # Agent TypeScript SDK
 │   └── cli/           # uomp command-line tool
 ├── apps/
-│   └── server/        # Combined Auth + Guard service
+│   ├── server/        # Combined Auth + Guard service
+│   └── gateway/       # Remote Authorization Gateway (mTLS + token relay)
 ├── examples/
 │   └── calendar-agent/# Example Agent
 └── specs/
