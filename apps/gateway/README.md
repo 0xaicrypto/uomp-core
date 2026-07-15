@@ -1,22 +1,49 @@
 # UOMP Remote Authorization Gateway
 
-A reference implementation of a UOMP Gateway that exposes a user’s Memory Guard over the network using mTLS + Capability Tokens.
+Reference implementation of the UOMP Gateway that exposes a user's Memory Guard over the network using mTLS + Capability Tokens, with optional Cloudflare Tunnel for zero-config public access.
 
-## Responsibilities
+## Quick start — one command
 
-- Terminate mutually-authenticated TLS from remote Agents.
-- Verify the Capability Token (`profile: "remote"`, audience matches Gateway endpoint).
-- Enforce optional `allowedEndpoints` restrictions.
-- Forward memory and audit requests to the local Memory Guard.
-- Provide a temporary payload upload/download cache (Phase 2).
+```bash
+uomp gateway start
+```
 
-## Quick start
+This starts the Gateway with a Cloudflare Tunnel, auto-exposing a public URL:
+
+```
+═══ Public Gateway URL ═══
+  https://xxx.trycloudflare.com
+export UOMP_BASE_URL="https://xxx.trycloudflare.com"
+```
+
+No public IP or port forwarding required.
+
+## How it works
+
+```text
+                    Cloudflare Tunnel               local HTTPS
+┌──────────────┐   ┌──────────────────┐   ┌──────────────┐   ┌──────────────┐
+│ Remote Agent │──►│ trycloudflare.com│──►│ UOMP Gateway │──►│ Memory Guard │
+│ (DO / SaaS)  │   │ (auto-tunnel)    │   │   :9443      │   │   :9374      │
+└──────────────┘   └──────────────────┘   └──────────────┘   └──────────────┘
+```
+
+The Gateway does **not** hold the Auth Service private key; it only imports the public key to verify tokens issued by the local Auth Service.
+
+## CLI commands
+
+```bash
+uomp gateway start              # Gateway + Cloudflare Tunnel (recommended)
+uomp gateway start --no-tunnel  # Gateway only, no tunnel
+uomp gateway status             # Check if Gateway is running
+```
+
+## Manual mode (without CLI)
 
 1. Start the local UOMP Auth + Guard server:
 
    ```bash
    pnpm --filter @uomp/server start
-   # or via systemd-run as in the main README
    ```
 
 2. Generate Gateway mTLS certificates:
@@ -25,54 +52,57 @@ A reference implementation of a UOMP Gateway that exposes a user’s Memory Guar
    ./scripts/generate-gateway-certs.sh
    ```
 
-   This writes CA, Gateway and client certificates to `~/.uomp/.gateway-certs`.
+3. Start the Gateway with tunnel:
 
-3. Create a `remote-profile.json` in `~/.uomp` with the client certificate fingerprint in the allowlist:
+   ```bash
+   UOMP_GATEWAY_TUNNEL=true node apps/gateway/dist/index.js
+   ```
+
+   Or without tunnel:
+
+   ```bash
+   node apps/gateway/dist/index.js
+   ```
+
+4. Create a remote-profile.json:
 
    ```json
    {
      "profile": "remote",
      "gateway": {
        "endpoint": "https://localhost:9443",
-       "tls": { "mtls_required": true },
-       "agent_allowlist": [
-         "AA:BB:CC:..."
-       ]
+       "tls": { "mtls_required": false },
+       "agent_allowlist": []
      }
    }
    ```
 
-   The script prints the client fingerprint after generation.
-
-4. Start the Gateway:
-
-   ```bash
-   node apps/gateway/dist/index.js
-   ```
-
-   Environment variables:
-
-   - `UOMP_GATEWAY_PORT` — default `9443`
-   - `UOMP_GATEWAY_HOST` — default `0.0.0.0`
-   - `UOMP_GUARD_URL` — local Guard URL, default `http://127.0.0.1:9374`
-   - `UOMP_GATEWAY_CERT`, `UOMP_GATEWAY_KEY`, `UOMP_GATEWAY_CA` — paths to cert files
-   - `UOMP_REMOTE_PROFILE` — path to remote profile JSON
-   - `UOMP_GATEWAY_AUDIENCE` — override the expected token audience
-
-5. Issue a remote Capability Token and test:
+5. Issue a remote token and test:
 
    ```bash
    ./scripts/test-gateway-remote.sh
    ```
 
-   This creates a session, grants a remote token, and fetches memory through the Gateway using mTLS.
+## Environment variables
 
-## Architecture
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UOMP_GATEWAY_PORT` | `9443` | Gateway HTTPS port |
+| `UOMP_GATEWAY_HOST` | `0.0.0.0` | Bind address |
+| `UOMP_GATEWAY_TUNNEL` | `false` | Auto-start Cloudflare Tunnel |
+| `UOMP_GUARD_URL` | `http://127.0.0.1:9374` | Local Guard URL |
+| `UOMP_GATEWAY_CERT` | `~/.uomp/.gateway-certs/gateway.crt` | TLS cert path |
+| `UOMP_GATEWAY_KEY` | `~/.uomp/.gateway-certs/gateway.key` | TLS key path |
+| `UOMP_GATEWAY_CA` | `~/.uomp/.gateway-certs/ca.crt` | CA cert path |
+| `UOMP_REMOTE_PROFILE` | `~/.uomp/remote-profile.json` | Profile path |
+| `UOMP_GATEWAY_AUDIENCE` | auto / from profile | Expected token audience |
 
-```text
-┌──────────────┐      mTLS + Bearer token      ┌──────────────┐      local HTTP      ┌──────────────┐
-│ Remote Agent │  ───────────────────────────▶  │ UOMP Gateway │  ────────────────▶  │ Memory Guard │
-└──────────────┘                                 └──────────────┘                     └──────────────┘
+## Deployed Agent
+
+A public Stock Analyst instance is running at:
+
+```
+https://uomp-stock-analyst-mvblm.ondigitalocean.app
 ```
 
-The Gateway does **not** hold the Auth Service private key; it only imports the public key to verify tokens issued by the local Auth Service.
+Users start their Gateway with `uomp gateway start`, authorize, then paste their token into the DO Agent's web UI — or call the API directly.

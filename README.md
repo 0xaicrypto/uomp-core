@@ -147,17 +147,33 @@ This bundles authorization, Guard startup, and Agent launch into one command.
 
 #### Remote mode via Gateway
 
-Use the Gateway when the Agent runs outside your local machine.
+Use the Gateway when the Agent runs outside your local machine. One command, no public IP required:
 
 ```bash
-# 1. Generate mTLS certificates and a remote profile
-./scripts/generate-gateway-certs.sh
+# Start Gateway + Cloudflare Tunnel (auto-exposes public URL)
+uomp gateway start
 
-# 2. Start the Gateway
-node apps/gateway/dist/index.js
+# Output:
+# ═══ Public Gateway URL ═══
+#   https://xxx.trycloudflare.com
+# export UOMP_BASE_URL="https://xxx.trycloudflare.com"
 
-# 3. Create a remote session and run a smoke test
-./scripts/test-gateway-remote.sh
+# Authorize a remote Agent
+uomp authorize ./examples/stock-analyst --remote --output /tmp/uomp.env
+source /tmp/uomp.env
+
+# The Agent can now connect from anywhere.
+# Or use the hosted DO Agent:
+# curl -X POST https://uomp-stock-analyst-mvblm.ondigitalocean.app/analyze \
+#   -H 'Content-Type: application/json' \
+#   -d '{"token":"$UOM_TOKEN","gateway_url":"$UOMP_BASE_URL"}'
+```
+
+**Without tunnel** (manual Gateway only):
+
+```bash
+node apps/gateway/dist/index.js                          # Gateway only
+uomp gateway start --no-tunnel                           # or via CLI
 ```
 
 See `apps/gateway/README.md` for full configuration options.
@@ -384,6 +400,31 @@ pnpm cli run ./examples/calendar-agent
 ```
 
 该命令把授权、启动 Guard、启动 Agent 打包在一起，仅适用于本地开发测试。
+
+#### 方式三：远程模式（Gateway + Cloudflare Tunnel）
+
+一条命令，无需公网 IP，将本地 Memory Guard 暴露给任意远程 Agent：
+
+```bash
+# 启动 Gateway + 自动反代隧道
+uomp gateway start
+
+# 输出：
+# ═══ Public Gateway URL ═══
+#   https://xxx.trycloudflare.com
+# export UOMP_BASE_URL="https://xxx.trycloudflare.com"
+
+# 授权远程 Agent
+uomp authorize ./examples/stock-analyst --remote --output /tmp/uomp.env
+source /tmp/uomp.env
+
+# 调用已部署的 DO Agent：
+curl -X POST https://uomp-stock-analyst-mvblm.ondigitalocean.app/analyze \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"$UOM_TOKEN","gateway_url":"$UOMP_BASE_URL"}'
+```
+
+详见 `apps/gateway/README.md`。
 
 ### 项目结构
 

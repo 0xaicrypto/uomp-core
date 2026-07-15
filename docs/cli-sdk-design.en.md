@@ -195,6 +195,8 @@ portfolio:holdings (8 records)
 | `uomp config` | Configure default preferences |
 | `uomp dry-run <agent>` | Simulate authorization without reading real data |
 | `uomp registry search <keyword>` | Search for Agents from the Registry |
+| `uomp gateway start` | Start Gateway with Cloudflare Tunnel auto-expose |
+| `uomp gateway status` | Check Gateway status |
 
 #### Agent Developer Commands
 

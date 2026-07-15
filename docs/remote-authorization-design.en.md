@@ -80,25 +80,33 @@ Key principles:
 
 ### 3.1 Quick Validation
 
-`uomp-mvp` already ships with a runnable Gateway reference implementation:
+`uomp-mvp` already ships with a runnable Gateway reference implementation plus one-command Cloudflare Tunnel:
 
 ```bash
 # 1. Make sure the local Auth + Guard service is running
 pnpm --filter @uomp/server start
 
-# 2. Generate CA / Gateway server cert / client cert
-./scripts/generate-gateway-certs.sh
+# 2. Start Gateway + Cloudflare Tunnel (auto public URL)
+uomp gateway start
 
-# 3. Add the client fingerprint to ~/.uomp/remote-profile.json agent_allowlist
-
-# 4. Start the Gateway
-node apps/gateway/dist/index.js
-
-# 5. Create a remote session and run the end-to-end smoke test
-./scripts/test-gateway-remote.sh
+# 3. Use the trycloudflare.com URL as the Gateway endpoint
+# 4. Authorize + run (see below)
 ```
 
-The current Gateway supports: mTLS termination, remote Token validation, Memory Guard forwarding, `/v1/audit` queries, and temporary Payload caching (unencrypted; Phase 2 adds E2E encryption).
+**Manual mode without tunnel**:
+
+```bash
+# Generate certs
+./scripts/generate-gateway-certs.sh
+
+# Add client fingerprint to ~/.uomp/remote-profile.json agent_allowlist
+
+# Start Gateway
+node apps/gateway/dist/index.js
+
+# Create remote session and smoke test
+./scripts/test-gateway-remote.sh
+```
 
 ---
 
@@ -197,7 +205,8 @@ Remote Profile is a user-side configuration that describes how local Memory is e
 Deployment options:
 
 - **Default: user self-hosted**. In the open-source core implementation, the Gateway is run by the user on their own VPS, NAS, cloud server, or home server.
-- A reverse tunnel (Cloudflare Tunnel, ngrok) can also be used to expose the Gateway to the public internet without requiring a public IP.
+- **Recommended (no public IP needed)**: use `uomp gateway start` to launch with Cloudflare Tunnel, automatically obtaining a `https://xxx.trycloudflare.com` public URL. No port forwarding or public IP required.
+- A reverse tunnel (Cloudflare Tunnel, ngrok) can also be used to expose the Gateway to the public internet.
 - Communication between Gateway and local Memory Guard uses mTLS or a local Unix socket.
 - **Future commercial option**: A managed Gateway service may be offered, but the open-source core will always retain self-hosting as the default and trust root.
 
@@ -437,6 +446,7 @@ await agent.output.upload(report, { encryptTo: remoteProfile.encryption.public_k
 - Token validation and Memory Guard forwarding
 - Basic audit logging (via `/v1/audit`)
 - Scripts: `scripts/generate-gateway-certs.sh`, `scripts/test-gateway-remote.sh`
+- CLI: `uomp gateway start` (with Cloudflare Tunnel auto-expose)
 
 ### Phase 2: E2E Payload (2 weeks)
 

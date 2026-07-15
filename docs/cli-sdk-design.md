@@ -195,6 +195,8 @@ portfolio:holdings（8 条记录）
 | `uomp config` | 配置默认偏好 |
 | `uomp dry-run <agent>` | 模拟授权，不读真实数据 |
 | `uomp registry search <keyword>` | 从 Registry 搜索 Agent |
+| `uomp gateway start` | 启动 Gateway（含 Cloudflare Tunnel 自动公网暴露） |
+| `uomp gateway status` | 查看 Gateway 运行状态 |
 
 #### Agent Developer 命令
 
