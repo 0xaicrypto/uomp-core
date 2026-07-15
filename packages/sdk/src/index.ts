@@ -3,22 +3,28 @@ import type { MemoryItem } from '@uomp/core';
 export interface UserMemoryClientOptions {
   baseUrl?: string;
   token: string;
+  agentId?: string;
   timeoutMs?: number;
+  fetch?: typeof globalThis.fetch;
 }
 
 export class UserMemory {
   private baseUrl: string;
   private token: string;
+  private agentId?: string;
   private timeoutMs: number;
+  private customFetch?: typeof globalThis.fetch;
 
   constructor(options: UserMemoryClientOptions) {
     this.baseUrl = (options.baseUrl ?? 'http://127.0.0.1:9374').replace(/\/$/, '');
     this.token = options.token;
+    this.agentId = options.agentId;
     this.timeoutMs = options.timeoutMs ?? 10000;
+    this.customFetch = options.fetch;
   }
 
   async get<T = unknown>(key: string): Promise<MemoryItem<T> | null> {
-    const response = await this.fetch(`/v1/memory/${encodeURIComponent(key)}`);
+    const response = await this.doFetch(`/v1/memory/${encodeURIComponent(key)}`);
 
     if (response.status === 404) {
       return null;
@@ -33,7 +39,7 @@ export class UserMemory {
   }
 
   async getByTag<T = unknown>(tag: string): Promise<MemoryItem<T>[]> {
-    const response = await this.fetch(`/v1/memory?tag=${encodeURIComponent(tag)}`);
+    const response = await this.doFetch(`/v1/memory?tag=${encodeURIComponent(tag)}`);
 
     if (!response.ok) {
       const error = await this.parseError(response);
@@ -52,16 +58,22 @@ export class UserMemory {
     throw new UserMemoryError('WRITE_NOT_AVAILABLE', 'Agent deletes are not available in MVP', undefined);
   }
 
-  private async fetch(path: string): Promise<Response> {
+  private async doFetch(path: string): Promise<Response> {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${this.token}`,
+      Accept: 'application/json',
+    };
+    if (this.agentId) {
+      headers['X-UOMP-Agent-Id'] = this.agentId;
+    }
+
     try {
-      return await fetch(`${this.baseUrl}${path}`, {
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          Accept: 'application/json',
-        },
+      const f = this.customFetch ?? fetch;
+      return await f(`${this.baseUrl}${path}`, {
+        headers,
         signal: controller.signal,
       });
     } finally {

@@ -3,22 +3,24 @@
   "agent": {
     "id": "stock-analyst",
     "name": "持仓分析助手",
-    "version": "0.1.0",
-    "description": "基于持仓和市场公开信息生成投资策略分析",
+    "version": "0.2.0",
+    "description": "多维度持仓分析：盈亏、风险对齐、集中度、历史表现，输出中英双语报告",
     "publisher": "uomp-community"
   },
   "requested_scopes": {
     "read": {
-      "tags": ["portfolio:holdings", "portfolio:watchlist", "profile:risk"],
+      "tags": ["portfolio:holdings", "profile:risk"],
       "keys": [],
       "deny_tags": [],
       "deny_keys": [],
       "fields": {
-        "portfolio:holdings": ["symbol", "quantity", "cost_basis", "market_value"]
+        "portfolio:holdings": ["symbol", "name", "quantity", "cost_basis", "market_value", "sector"]
       },
       "purposes": {
-        "portfolio:holdings": "计算仓位权重、行业分布和盈亏分析"
-      }
+        "portfolio:holdings": "计算盈亏、权重、行业分布、集中度与风险偏差",
+        "profile:risk": "获取风险偏好、目标配置、止损止盈策略"
+      },
+      "allowed_fields": ["key", "value"]
     },
     "write": {
       "tags": [],
@@ -28,14 +30,15 @@
     }
   },
   "required_capabilities": ["memory.read"],
-  "optional_capabilities": [],
+  "optional_capabilities": ["memory.aggregate"],
   "requires_remote": false,
-  "external_data_sources": ["yahoo-finance"],
+  "external_data_sources": ["yahoo-finance", "finnhub"],
   "data_retention_policy": {
     "max_retention_seconds": 0,
     "deletion_method": "process_termination",
     "proof_required": false,
-    "description": "Agent 进程结束即清除所有数据，不持久化",
-    "third_party_sharing": true
+    "description": "Agent 进程结束即清除所有数据，不持久化；报告仅保存在本地或加密上传到 Gateway",
+    "third_party_sharing": true,
+    "encryption_at_rest": false
   }
 }
