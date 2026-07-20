@@ -158,6 +158,32 @@ async function run() {
 
 app.post('/analyze', async c => {
   const body = await c.req.json();
+
+  // Mode 1: Direct portfolio (browser dashboard — no Gateway needed)
+  if (body.holdings && !body.token) {
+    try {
+      const holdings = body.holdings;
+      const risk = body.risk || {};
+      const symbols = [...new Set(holdings.map(h => h.value?.symbol).filter(Boolean))];
+      const quotes = await fetchQuotes(symbols, { finnhubKey: body.finnhub_key || process.env.FINNHUB_KEY || '' });
+      const config = mergeConfig(body.config || {});
+      const analysis = analyze(holdings, risk, quotes.filter(q => q?.price != null), config);
+
+      const results = {};
+      if (config.report.include_json !== false) results.json = generateJSON(analysis);
+      if (config.report.include_html !== false) results.html = generateHTML(analysis);
+      if (config.report.include_markdown !== false) {
+        for (const lang of config.languages) results[`markdown_${lang}`] = generateMarkdown(analysis, lang);
+      }
+      return c.json({
+        summary: { holdings_count: holdings.length, total_pnl: analysis.totalPnl, total_pnl_pct: analysis.totalPnlPct,
+          hhi: analysis.hhi, portfolio_volatility: analysis.portfolioVolatility, portfolio_sharpe: analysis.portfolioSharpe, signals_count: analysis.signals.length },
+        results, timestamp: analysis.timestamp
+      });
+    } catch (err) { return c.json({ error: { code: 'ANALYSIS_FAILED', message: err.message } }, 500); }
+  }
+
+  // Mode 2: Gateway mode (existing — token + gateway_url)
   const token = body.token;
   if (!token) return c.json({ error: { code: 'INVALID_REQUEST', message: 'token is required' } }, 400);
 
