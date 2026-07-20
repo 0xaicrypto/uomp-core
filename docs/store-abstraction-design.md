@@ -144,27 +144,83 @@ Item 明文 → AES-256-GCM → ciphertext + nonce + tag
 写回 Index 缓存优化：Guard 内存缓存 tag→keys 映射，避免每次读 tags/ 对象。
 
 
-## 5. 密钥管理（Seed Phrase）
+## 5. 密钥管理（Wallet-Authenticated + Seed Phrase 备用）
+
+用户身份不依赖 UOMP 自己生成的 seed phrase，而是**通过用户已有的钱包签名**派生密钥。
+
+### 5.1 钱包支持矩阵
+
+| 钱包 | 平台 | 签名方法 | 优先级 |
+|------|------|---------|--------|
+| **MetaMask** | Browser Extension | `personal_sign` (EIP-1193) | P0 |
+| **Argent X** | Browser Extension | `starknet_signMessage` | P0 |
+| **Braavos** | Browser Extension | `starknet_signMessage` | P0 |
+| **Argent Mobile** | iOS / Android | WalletConnect → `starknet_signMessage` | P0 |
+| **Braavos Mobile** | iOS / Android | WalletConnect → `starknet_signMessage` | P0 |
+| **Seed Phrase** | 无钱包场景 | 12 词 BIP-39 |备用 |
+
+### 5.2 密钥推导（链无关）
 
 ```
-User                     Device A                    Device B
-────                     ────────                    ────────
-uomp init
-  → 生成 Ed25519 keypair
-  → 显示 12 词 seed phrase              uomp user setup
-    "coral maple ..."                        → 输入 seed phrase
-  → 派生 masterKey                          → 派生相同 masterKey
-  → 存储 seed hash                          → 验证 seed hash 一致
-  → 自动 sync pull                          → 数据立即可用
+用户操作                        UOMP SDK
+────────                       ────────
+1. 连接钱包
+   MetaMask: eth_requestAccounts
+   Argent X: wallet_requestAccounts
+
+2. 签名固定消息 "UOMP Store v1"
+   MetaMask: personal_sign(message)
+   Starknet: starknet_signMessage({ domain, message, primaryType, types })
+
+3. 拿到 signature + address
+
+4. masterKey = HKDF-SHA256(
+     ikm  = signature[0:32] || keccak256(address),
+     salt = "uomp-store-v1",
+     info = chain + ":" + address,
+     len  = 32
+   )
+
+5. 从 masterKey 派生：
+   - Ed25519 keypair（Token 签名）
+   - AES-256 itemKey（Memory Item 加密）
 ```
 
-### 命令
+同一钱包同一消息 → 任何设备导出相同 masterKey。
+
+### 5.3 用户身份 ID
+
+```ts
+user_id = keccak256(chain + ":" + address.toLower())
+// "starknet:0x05afebcea..."
+// "ethereum:0xabc..."
+```
+
+### 5.4 多设备同步
+
+```
+Device A (Desktop + MetaMask)           Device B (Mobile + Argent)
+───────────────────────────             ─────────────────────────
+1. 打开 Web App                         1. 打开 Argent Mobile App
+2. 点击 "Connect Wallet"                2. 扫码 WalletConnect
+3. MetaMask 弹窗 → 签名                 3. 确认签名
+4. deriveKey → masterKey                4. 同样 masterKey ✅
+5. 从 S3 拉取加密数据                   5. 同样数据 ✅
+```
+
+### 5.5 命令
 
 ```bash
-uomp user init              # 生成 seed phrase（首次）
-uomp user setup             # 从 seed phrase 恢复（新设备）
-uomp user export            # 显示 seed phrase（迁移）
-uomp user status            # 当前用户 ID + 后端状态
+# 钱包方式（推荐）
+uomp user init --wallet starknet    # 浏览器签名 → 派生 key
+uomp user init --wallet ethereum    # MetaMask 签名
+
+# Seed phrase 备用
+uomp user init --seed               # 生成 12 词
+uomp user setup                     # 从 seed 恢复
+uomp user export                    # 显示 seed
+
+uomp user status                    # 当前 user_id + 关联钱包
 ```
 
 
@@ -281,16 +337,57 @@ Guard 接口不变——`get()`, `getByTag()` 签名一致。
 
 ```ts
 interface UompClient {
-  store: StoreClient;  // ← 新增
+  store: StoreClient;
+  identity: IdentityClient;  // ← 新增
 }
 
-interface StoreClient {
-  stats(): Promise<StoreStats>;
-  migrate(target: StoreBackend): Promise<void>;
+interface IdentityClient {
+  /** Connect via wallet */
+  fromWallet(chain: 'ethereum' | 'starknet'): Promise<Identity>;
+  /** Recovery via seed phrase */
+  fromSeedPhrase(phrase: string): Promise<Identity>;
+  /** Get current identity */
+  current(): Identity | null;
 }
 
-const stats = await uomp.store.stats();
-// { backend: 'sqlite', itemCount: 10, totalSizeBytes: 4096 }
+interface Identity {
+  userId: string;         // keccak256(chain:address)
+  chain: string;
+  address: string;
+  wallet?: string;        // 'metamask' | 'argent-x' | 'braavos' | 'argent-mobile'
+}
+
+// ── Usage ─────────────────────────────────────────────
+
+// Browser: MetaMask
+const uomp = new UompClient({ baseUrl: 'https://my-gateway.example.com' });
+const id = await uomp.identity.fromWallet('ethereum');
+// → MetaMask 弹窗 → 签名 → 派生 masterKey
+console.log(id.userId); // "ethereum:0xabc..."
+
+// Browser: Argent X
+const id = await uomp.identity.fromWallet('starknet');
+// → Argent X 弹窗 → 签名
+
+// Mobile: Argent (via WalletConnect)
+const id = await uomp.identity.fromWallet('starknet');
+// → 内置 WalletConnect → 扫码连接
+```
+
+### Browser SDK 钱包入口
+
+```ts
+// packages/sdk/src/browser.ts
+import { BrowserSDK } from '@uomp/sdk/browser';
+
+// 一键连接（自动检测可用钱包）
+const uomp = await BrowserSDK.fromWallet();
+// 内部：
+// 1. 检测 window.starknet (Argent X) 或 window.ethereum (MetaMask)
+// 2. 请求连接
+// 3. 签名 "UOMP Store v1"
+// 4. deriveKey → masterKey
+// 5. 创建 UompClient
 ```
 
 ### `@uomp/cli` 新增
@@ -314,13 +411,17 @@ uomp sync pull / push / auto
 | Guard 改用工厂 | `packages/guard/src/index.ts`（改 3 行） |
 | `uomp store status` 命令 | `packages/cli/src/commands/store.ts`（新） |
 
-### Phase 2：Seed Phrase 密钥管理
+### Phase 2：Wallet Auth + Seed Phrase 密钥管理
 
 | 任务 | 文件 |
 |------|------|
-| Seed phrase 生成（BIP-39） | `packages/identity/src/seed.ts`（新） |
-| `uomp user init / setup / export` | `packages/cli/src/commands/user.ts`（新） |
-| `~/.uomp/user.json` 存储 | CLI/SDK 共用 |
+| HKDF 密钥推导（链无关） | `packages/identity/src/wallet-auth.ts`（新） |
+| EIP-1193 provider 封装（MetaMask） | 同上 |
+| Starknet provider 封装（Argent X, Braavos） | 同上 |
+| WalletConnect 移动端支持 | 同上 |
+| `uomp user init --wallet` 命令 | CLI |
+| `BrowserSDK.fromWallet()` | SDK |
+| `~/.uomp/user.json` 多身份存储 | CLI/SDK 共用 |
 
 ### Phase 3：Encrypted Object Backend
 
