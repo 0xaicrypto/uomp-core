@@ -102,14 +102,16 @@ function matchesAllowedEndpoint(path: string, patterns: string[] | undefined): b
 }
 
 async function forwardToGuard(c: any, config: GatewayConfig): Promise<Response> {
-  const payload = c.get('tokenPayload') as CapabilityTokenPayload;
+  const payload = c.get('tokenPayload') as CapabilityTokenPayload | undefined;
   const target = new URL(c.req.path, config.guardUrl);
   target.search = new URL(c.req.url).search;
 
   const headers: Record<string, string> = {
     authorization: c.req.header('authorization') ?? '',
-    'x-uomp-agent-id': payload.agentId,
   };
+  if (payload) {
+    headers['x-uomp-agent-id'] = payload.agentId;
+  }
 
   const body = ['GET', 'HEAD'].includes(c.req.method) ? undefined : await c.req.arrayBuffer();
 
@@ -167,9 +169,10 @@ async function main() {
     });
   }
 
-  // Token validation middleware
+  // Token validation middleware (skip health and session creation)
   app.use('/v1/*', async (c, next) => {
     if (c.req.path === '/v1/health') return next();
+    if (c.req.path === '/v1/sessions' && c.req.method === 'POST') return next();
 
     const authHeader = c.req.header('authorization');
     const agentId = c.req.header('x-uomp-agent-id');
@@ -218,11 +221,8 @@ async function main() {
     return next();
   });
 
-  // Forward memory and audit requests to local Memory Guard
-  app.all('/v1/memory/*', async c => forwardToGuard(c, config));
-  app.all('/v1/memory/aggregate', async c => forwardToGuard(c, config));
-  app.all('/v1/audit/*', async c => forwardToGuard(c, config));
-  app.post('/v1/sessions/:id/deletion-proof', async c => forwardToGuard(c, config));
+  // Forward all /v1/* requests to local Memory Guard (Auth + Guard combined server)
+  app.all('/v1/*', async c => forwardToGuard(c, config));
 
   // Payload upload / download (Phase 2: simple in-memory cache)
   const payloadCache = new Map<string, { data: ArrayBuffer; meta: Record<string, unknown> }>();
