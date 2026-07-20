@@ -281,7 +281,59 @@ export async function createStore(config: StoreConfig): Promise<IMemoryStore> {
 Guard 接口不变——`get()`, `getByTag()` 签名一致。
 
 
-## 8. 对规范的影响
+## 8. Browser SDK 自动路由（StoreRouter）
+
+浏览器模式下，SDK 根据 Gateway 是否在线自动选择数据通路：
+
+**读操作：Gateway 优先，降级 S3 直读**
+
+```ts
+class StoreRouter {
+  async getByTag(tag) {
+    // 1. 尝试 Gateway
+    const gw = await this.tryGateway(`/v1/memory?tag=${tag}`);
+    if (gw) return gw.items;
+
+    // 2. Gateway 不可达 → S3 直读 + 浏览器内解密
+    const keys = await this.readEncryptedIndex(tag);
+    const blobs = await Promise.all(keys.map(k => this.s3.get(`items/${k}`)));
+    return blobs.map(b => this.decrypt(b, k));
+  }
+}
+```
+
+**写操作和聚合：必须经过 Gateway**
+
+```ts
+async set(key, item) {
+  const resp = await fetch(`${gatewayUrl}/v1/memory/${key}`, {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${token}` },
+    body: JSON.stringify(item),
+  });
+  if (!resp.ok) throw new UompError('WRITE_REQUIRES_GATEWAY');
+}
+```
+
+**Webapp 开发者体验**
+
+```tsx
+const uomp = useUomp({ gatewayUrl: 'https://my-gateway.example.com' });
+// 读：Gateway 在线走 Gateway，不在线走 S3 直读（零配置）
+// 写：Gateway 必须在线，否则 uomp.isGatewayOnline === false
+```
+
+### 8.1 isGatewayOnline
+
+SDK 暴露一个布尔属性，由最近一次请求自动更新：
+
+```ts
+uomp.isGatewayOnline: boolean
+```
+
+Webapp 据此控制 UI：写入按钮禁用、顶部显示离线 banner。
+
+## 9. 对规范的影响
 
 | 位置 | 变更 |
 |------|------|
