@@ -23,6 +23,7 @@ interface GatewayConfig {
   requireMtls: boolean;
   agentAllowlist: string[];
   tunnel: boolean;
+  allowBrowser: boolean;
 }
 
 interface RemoteProfile {
@@ -31,6 +32,7 @@ interface RemoteProfile {
     endpoint?: string;
     tls?: { mtls_required?: boolean };
     agent_allowlist?: string[];
+    allow_browser?: boolean;
   };
   audit?: { anchor_chain?: string };
 }
@@ -76,6 +78,7 @@ async function loadConfig(): Promise<GatewayConfig> {
     requireMtls: profile?.gateway?.tls?.mtls_required ?? true,
     agentAllowlist: profile?.gateway?.agent_allowlist ?? [],
     tunnel: process.env.UOMP_GATEWAY_TUNNEL === 'true' || process.env.UOMP_GATEWAY_EXPOSE === 'true',
+    allowBrowser: process.env.UOMP_GATEWAY_BROWSER === 'true' || profile?.gateway?.allow_browser === true,
   };
 }
 
@@ -152,6 +155,17 @@ async function main() {
   const app = new Hono<{ Bindings: Bindings }>();
 
   app.get('/v1/health', c => c.json({ status: 'ok', audience: audienceRef.value }));
+
+  // CORS for browser access
+  if (config.allowBrowser) {
+    app.use('*', async (c, next) => {
+      c.header('Access-Control-Allow-Origin', '*');
+      c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      c.header('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-UOMP-Agent-Id');
+      if (c.req.method === 'OPTIONS') return new Response(null, { status: 204 });
+      await next();
+    });
+  }
 
   // Token validation middleware
   app.use('/v1/*', async (c, next) => {
@@ -249,6 +263,7 @@ async function main() {
     console.log(`UOMP Gateway listening on https://${config.host}:${config.port}`);
     console.log(`Forwarding memory requests to ${config.guardUrl}`);
     console.log(`mTLS required: ${config.requireMtls}`);
+    console.log(`Browser access: ${config.allowBrowser ? 'enabled (CORS)' : 'disabled'}`);
 
     // Optionally expose via Cloudflare Tunnel
     if (config.tunnel) {

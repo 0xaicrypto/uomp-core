@@ -11,6 +11,7 @@ export class GatewayCommands {
     return new Command('start')
       .description('Start the UOMP Gateway with optional Cloudflare Tunnel')
       .option('--no-tunnel', 'Disable Cloudflare Tunnel (Gateway only)')
+      .option('--browser', 'Enable CORS for browser-based agents')
       .option('-p, --port <port>', 'Gateway HTTPS port', '9443')
       .option('--host <host>', 'Gateway bind host', '0.0.0.0')
       .action(async (options) => {
@@ -36,6 +37,7 @@ export class GatewayCommands {
           UOMP_GATEWAY_PORT: options.port,
           UOMP_GATEWAY_HOST: options.host,
           UOMP_GATEWAY_TUNNEL: options.tunnel !== false ? 'true' : 'false',
+          UOMP_GATEWAY_BROWSER: options.browser ? 'true' : 'false',
         } as Record<string, string>;
 
         const child = spawn('node', [gatewayPath], {

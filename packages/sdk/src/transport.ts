@@ -30,6 +30,7 @@ export class Transport {
   private customFetch?: typeof fetch;
   private mtlsAgent: https.Agent | null;
   private jwtToken: (() => string) | null;
+  private isBrowser: boolean;
 
   constructor(options: UompClientOptions = {}, jwtToken?: () => string) {
     this.baseUrl = (options.baseUrl || 'http://127.0.0.1:9374').replace(/\/$/, '');
@@ -40,8 +41,9 @@ export class Transport {
     this.customFetch = options.transport?.fetch;
     this.mtlsAgent = null;
     this.jwtToken = jwtToken ?? null;
+    this.isBrowser = typeof globalThis.window !== 'undefined' && typeof (globalThis as any).window?.fetch !== 'undefined';
 
-    if (this.baseUrl.startsWith('https://')) {
+    if (this.baseUrl.startsWith('https://') && !this.isBrowser) {
       this.loadMtlsCert(options.tls);
     }
   }
@@ -96,14 +98,13 @@ export class Transport {
           }
 
           const url = `${this.baseUrl}${path}`;
-          const resp = this.mtlsAgent
-            ? await this.nativeRequest(url, { ...init, headers, signal: controller.signal })
-            : await (this.customFetch ?? fetch)(url, {
-                method: init.method,
-                headers,
-                body: init.body,
-                signal: controller.signal,
-              });
+          const f = this.isBrowser
+            ? ((this.customFetch ?? (globalThis as any).fetch) as typeof fetch)
+            : (this.mtlsAgent ? this.nativeRequest.bind(this) : (this.customFetch ?? fetch));
+
+          const resp = this.isBrowser
+            ? await (f as typeof fetch)(url, { method: init.method, headers, body: init.body as any, signal: controller.signal })
+            : await (f as typeof this.nativeRequest)(url, { ...init, headers, signal: controller.signal });
 
           return resp;
         } finally {
