@@ -10,6 +10,10 @@ export { SessionClient } from './session.js';
 export { AuthClient } from './auth.js';
 export { AuditClient } from './audit.js';
 
+// Browser components
+export { StoreRouter } from './store-router.js';
+export type { RouterConfig } from './store-router.js';
+
 // ── Backward compatibility ────────────────────────────────────────
 
 import { MemoryClient } from './memory.js';

@@ -1,18 +1,10 @@
-/**
- * UOMP SDK — Browser entry point.
- * Uses window.fetch, no mTLS, no Node.js dependencies.
- */
-
 /// <reference lib="dom" />
 
 import { UompClient } from './client.js';
-import { Transport } from './transport.js';
-
-// Force browser mode in Transport
-(Transport as any)._forceBrowser = true;
 
 export { UompClient } from './client.js';
 export { UompError, UompErrorCode } from './errors.js';
+export { StoreRouter } from './store-router.js';
 export * from './types.js';
 
 export { MemoryClient } from './memory.js';
@@ -25,31 +17,25 @@ export { AuditClient } from './audit.js';
 const TOKEN_KEY = 'uomp_token';
 const GATEWAY_KEY = 'uomp_gateway';
 
-/** Browser-specific helpers */
 export const BrowserSDK = {
-  /** Persist token to sessionStorage (cleared when tab closes) */
   saveToken(token: string) {
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(TOKEN_KEY, token);
   },
 
-  /** Load token from sessionStorage */
   loadToken(): string {
     if (typeof sessionStorage !== 'undefined') return sessionStorage.getItem(TOKEN_KEY) || '';
     return '';
   },
 
-  /** Save Gateway URL */
   saveGatewayUrl(url: string) {
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(GATEWAY_KEY, url);
   },
 
-  /** Load Gateway URL */
   loadGatewayUrl(): string {
     if (typeof sessionStorage !== 'undefined') return sessionStorage.getItem(GATEWAY_KEY) || '';
     return '';
   },
 
-  /** Parse token from URL hash (e.g., #token=xxx&gateway=xxx) */
   fromUrlHash(): { token: string; gateway: string } {
     if (typeof window === 'undefined') return { token: '', gateway: '' };
     const params = new URLSearchParams(window.location.hash.slice(1));
@@ -60,13 +46,24 @@ export const BrowserSDK = {
     return { token, gateway };
   },
 
-  /** Create a client from stored token (sessionStorage) */
   createFromStorage(): UompClient {
-    const token = this.loadToken();
-    const gateway = this.loadGatewayUrl();
     return new UompClient({
-      token,
-      baseUrl: gateway || 'http://127.0.0.1:9374',
+      token: this.loadToken(),
+      baseUrl: this.loadGatewayUrl() || 'http://127.0.0.1:9374',
     });
+  },
+
+  /** Connect via wallet signature (MetaMask / Argent X placeholder) */
+  async fromWallet(_chain?: 'ethereum' | 'starknet'): Promise<UompClient> {
+    throw new Error(
+      'Wallet auth not yet implemented for browser. ' +
+      'Use BrowserSDK.createFromStorage() with a pre-existing token, ' +
+      'or BrowserSDK.fromUrlHash() to read token from URL.'
+    );
+  },
+
+  /** Create from seed phrase */
+  fromSeedPhrase(_phrase: string): UompClient {
+    throw new Error('Seed phrase auth not yet implemented for browser.');
   },
 };
