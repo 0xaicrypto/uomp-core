@@ -7,6 +7,7 @@ export { MemoryClient } from './memory.js';
 export { AggregateClient } from './aggregate.js';
 export { PayloadClient } from './payload.js';
 export { SessionClient } from './session.js';
+export { AuthClient } from './auth.js';
 export { AuditClient } from './audit.js';
 
 // ── Backward compatibility ────────────────────────────────────────

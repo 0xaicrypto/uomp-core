@@ -2,14 +2,42 @@ import type { MemoryItem, Sensitivity, AuditLogEntry } from '@uomp/core';
 
 export type { MemoryItem, Sensitivity, AuditLogEntry };
 
+export interface ScopeAction {
+  tags: string[];
+  keys: string[];
+  denyTags: string[];
+  denyKeys: string[];
+}
+
+export interface Scopes {
+  read: ScopeAction;
+  write: ScopeAction;
+}
+
+export interface TokenLimits {
+  maxReadQueries?: number;
+  maxWriteQueries?: number;
+}
+
+export interface TokenInfo {
+  sessionId: string;
+  agentId: string;
+  issuedAt: string;
+  expiresAt: string;
+  scopes: Scopes;
+  profile: string;
+  audience?: string;
+  allowedFields?: string[];
+  aggregationOnly: boolean;
+  taskBound: boolean;
+  limits?: TokenLimits;
+}
+
 export type AggregateOp = 'sum' | 'avg' | 'count' | 'min' | 'max';
 
-export interface AggregateResult {
-  op: AggregateOp;
-  field?: string;
-  result: number;
-  tag?: string;
-}
+export type AggregateResult =
+  | { op: 'count'; tag: string; result: number }
+  | { op: 'sum' | 'avg' | 'min' | 'max'; field: string; result: number };
 
 export interface PayloadInfo {
   payload_id: string;

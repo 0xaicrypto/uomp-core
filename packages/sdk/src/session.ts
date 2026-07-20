@@ -59,7 +59,19 @@ export class SessionClient {
   }
 
   async close(): Promise<void> {
-    await this.transport.request(`/v1/sessions/${this.sessionId}/close`, { method: 'POST' });
+    const resp = await this.transport.request(`/v1/sessions/${this.sessionId}/close`, { method: 'POST' });
+    if (!resp.ok) {
+      throw new UompError(UompErrorCode.UNKNOWN, `Failed to close session ${this.sessionId}`, undefined, resp.status);
+    }
+  }
+
+  /** Submit deletion proof and close session if task_bound */
+  async finalize(opts: DeletionProofOptions = {}): Promise<DeletionProofResult> {
+    const result = await this.submitDeletionProof(opts);
+    try {
+      await this.close();
+    } catch { /* session may already be closed by task_bound */ }
+    return result;
   }
 
   async isActive(): Promise<boolean> {

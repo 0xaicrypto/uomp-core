@@ -29,4 +29,5 @@ export class AggregateClient {
     if (field) params.set('field', field);
     return this.transport.requestJson<AggregateResult>(`/v1/memory/aggregate?${params.toString()}`);
   }
+
 }
