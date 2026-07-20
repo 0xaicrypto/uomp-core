@@ -201,14 +201,32 @@ const uomp = new UompClient({
 });
 ```
 
-### 5.3 Browser / Web App
+### 5.3 Browser / Web App (wallet auth + S3 direct + Cloud Relay)
 
 ```ts
-const uomp = new UompClient({
-  baseUrl: 'https://my-gateway.example.com',
-  transport: { fetch: window.fetch.bind(window) },
-});
+import { BrowserSDK } from '@uomp/sdk/browser';
+
+// Wallet signature → derive masterKey → auto-connect
+const uomp = await BrowserSDK.fromWallet();
+// → MetaMask/Argent X popup → sign → done
+
+// Specify chain
+const uomp = await BrowserSDK.fromWallet('starknet');
+
+// Seed phrase fallback
+const uomp = BrowserSDK.fromSeedPhrase('coral maple ...');
+
+// Read: auto-fallback (Gateway online → Gateway; offline → S3 direct + in-browser decrypt)
+const holdings = await uomp.memory.getByTag('portfolio:holdings');
+
+// Write: routed through Cloud Relay
+await uomp.memory.set('AAPL', newData);
+
+// Offline state
+console.log(uomp.isGatewayOnline); // boolean
 ```
+
+Browser mode includes built-in **StoreRouter**.
 
 ### 5.4 Serverless Agent
 

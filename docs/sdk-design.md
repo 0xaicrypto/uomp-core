@@ -266,24 +266,37 @@ const holdings = await uomp.memory.getByTag('portfolio:holdings');
 ```ts
 const uomp = new UompClient({
   baseUrl: 'https://my-gateway.example.com',
-  tls: {
-    autoMtls: true, // auto-load ~/.uomp/.gateway-certs/
-  },
 });
+// SDK auto-detects https:// → loads ~/.uomp/.gateway-certs/
+// auto-extracts sessionId/agentId from JWT payload
 ```
 
-### 5.3 浏览器 / Web App
+### 5.3 浏览器 / Web App（钱包签名 + S3 直读 + Cloud Relay）
 
 ```ts
-const uomp = new UompClient({
-  baseUrl: 'https://my-gateway.example.com',
-  transport: {
-    fetch: window.fetch.bind(window), // use browser fetch
-  },
-});
+import { BrowserSDK } from '@uomp/sdk/browser';
+
+// 钱包签名 → 派生 masterKey → 自动连接
+const uomp = await BrowserSDK.fromWallet();
+// → MetaMask/Argent X 弹窗 → 签名 → 完成
+
+// 指定链
+const uomp = await BrowserSDK.fromWallet('starknet');
+
+// Seed phrase 备用（无钱包）
+const uomp = BrowserSDK.fromSeedPhrase('coral maple ...');
+
+// 读：自动降级（Gateway 在线走 Gateway，不在线走 S3 直读 + 浏览器内解密）
+const holdings = await uomp.memory.getByTag('portfolio:holdings');
+
+// 写：走 Cloud Relay
+await uomp.memory.set('AAPL', newData);
+
+// 离线状态
+console.log(uomp.isGatewayOnline); // boolean
 ```
 
-注意：浏览器中无法直接使用 mTLS（需要 Service Worker 或浏览器扩展支持）。推荐浏览器 App 通过自己的后端代理 Gateway。
+浏览器模式下 SDK 内置 **StoreRouter**。
 
 ### 5.4 无状态 / Serverless Agent
 
@@ -293,9 +306,7 @@ export default async function handler(req) {
   const uomp = new UompClient({ token, baseUrl: gatewayUrl });
 
   const holdings = await uomp.memory.getByTag('portfolio:holdings');
-  // ... analyze ...
-
-  await uomp.session.submitDeletionProof();
+  await uomp.session.finalize(); // submitDeletionProof + close
   return { analysis };
 }
 ```
@@ -357,38 +368,49 @@ const items = await uomp.memory.getByTag('tag');
 
 ## 8. 实现路线
 
-### Phase 1：核心 SDK（当前优先级）
+### Phase 1：核心 SDK（已完成 ✅）
 
-| 任务 | 实现 |
+| 任务 | 文件 |
 |------|------|
-| `UompClient` 主类 | `packages/sdk/src/client.ts` |
-| Transport 层（HTTP + mTLS + 重试） | `packages/sdk/src/transport.ts` |
-| `memory` 子客户端 | `packages/sdk/src/memory.ts` |
-| `aggregate` 子客户端 | `packages/sdk/src/aggregate.ts` |
-| `payload` 子客户端 | `packages/sdk/src/payload.ts` |
-| `session` 子客户端 | `packages/sdk/src/session.ts` |
-| `audit` 子客户端 | `packages/sdk/src/audit.ts` |
-| 类型定义 | `packages/sdk/src/types.ts` |
-| 错误类型 | `packages/sdk/src/errors.ts` |
-| 向后兼容（保留 UserMemory） | `packages/sdk/src/index.ts` |
+| `UompClient` 主类 | `client.ts` |
+| Transport 层（HTTP + mTLS + 重试 + 浏览器检测） | `transport.ts` |
+| `memory` 子客户端 | `memory.ts` |
+| `aggregate` 子客户端 | `aggregate.ts` |
+| `payload` 子客户端 | `payload.ts` |
+| `session` 子客户端（含 `finalize()`、`trackAccess()`） | `session.ts` |
+| `audit` 子客户端 | `audit.ts` |
+| `auth` 子客户端（createSession / grant / revoke） | `auth.ts` |
+| 类型定义 + 错误类型 | `types.ts`, `errors.ts` |
+| Token 解码（tokenInfo） | `client.ts` |
+| 向后兼容（保留 UserMemory） | `index.ts` |
+| 浏览器入口 + BrowserSDK | `browser.ts` |
 
-### Phase 2：高级特性
+### Phase 2：钱包认证 + Store 抽象
 
 | 任务 | 说明 |
 |------|------|
-| Token 自动刷新 | SDK 内部维护 refresh_token，过期前自动续期 |
-| Payload E2E 加密 | 使用 Remote Profile 公钥自动加密/解密 |
-| mTLS 证书自动生成 | 首次使用时自动生成客户端证书 |
+| `identity` 子客户端 | wallet auth (MetaMask/Argent X/Braavos) + seed phrase fallback |
+| `store` 子客户端 | 查询后端状态、触发迁移 |
+| StoreRouter | 浏览器模式下读操作自动降级（Gateway → S3） |
+| `uomp.isGatewayOnline` | 浏览器 SDK 暴露 Gateway 在线状态 |
+| WalletConnect 移动端 | Argent Mobile / Braavos Mobile 支持 |
+
+### Phase 3：高级特性
+
+| 任务 | 说明 |
+|------|------|
+| Token 自动刷新 | SDK 内部维护 refresh_token |
+| Payload E2E 加密 | 使用 wallet-derived key 自动加密/解密 |
+| Cloud Relay SDK 集成 | 多 Relay 故障转移 |
 | 连接池与 keep-alive | 复用 HTTPS 连接 |
 
-### Phase 3：跨平台
+### Phase 4：跨平台
 
 | 任务 | 说明 |
 |------|------|
 | React Native 适配 | 使用 RN 原生 fetch |
-| 浏览器 Service Worker | 处理 CORS + 跨域请求 |
+| Chrome Extension 适配 | Manifest V3 + service worker |
 | Python SDK | 端口核心逻辑 |
-| CLI SDK 重构 | 复用 packages/sdk 而非重复实现 |
 
 ---
 
@@ -421,16 +443,19 @@ await uomp.session.submitDeletionProof();
 ```
 packages/sdk/
 ├── src/
-│   ├── index.ts          # 导出 UompClient + 兼容 UserMemory
+│   ├── index.ts          # Node.js 入口（导出 UompClient + 兼容 UserMemory）
+│   ├── browser.ts        # Browser 入口（BrowserSDK + 钱包集成）
 │   ├── client.ts         # UompClient 主类
-│   ├── memory.ts         # MemoryClient
+│   ├── memory.ts         # MemoryClient（自动追踪 key）
 │   ├── aggregate.ts      # AggregateClient
 │   ├── payload.ts        # PayloadClient
-│   ├── session.ts        # SessionClient
+│   ├── session.ts        # SessionClient（finalize + trackAccess）
 │   ├── audit.ts          # AuditClient
-│   ├── transport.ts      # HTTP 传输层（fetch、mTLS、重试）
+│   ├── auth.ts           # AuthClient（createSession / grant / revoke）
+│   ├── transport.ts      # HTTP 传输层（Node + 浏览器分支）
 │   ├── types.ts          # 公开类型定义
-│   └── errors.ts         # UompError 类
+│   ├── errors.ts         # UompError 类
+│   └── store-router.ts   # 浏览器自动路由（Gateway / S3）
 ├── package.json
 ├── tsconfig.json
 └── README.md
