@@ -104,3 +104,9 @@ export async function verifyGpgSignature(
   const { verified } = verificationResult.signatures[0];
   return await verified;
 }
+
+export { deriveMasterKey, createUserId, starknetSignMessage, ETHEREUM_SIGN_MESSAGE, verifySignature } from './wallet.js';
+export type { WalletIdentity } from './wallet.js';
+
+export { loadUser, saveUser, createUser, updateUser, defaultUserPath } from './user.js';
+export type { UserProfile } from './user.js';
