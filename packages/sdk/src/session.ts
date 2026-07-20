@@ -1,14 +1,32 @@
 import { createHash } from 'crypto';
 import { Transport } from './transport.js';
+import { UompError, UompErrorCode } from './errors.js';
 import type { DeletionProofResult, DeletionProofOptions, RefreshResult } from './types.js';
 
 export class SessionClient {
   private sessionId: string;
   private agentId: string;
+  private _accessedKeys: Set<string> = new Set();
 
   constructor(private transport: Transport, sessionId: string, agentId: string) {
     this.sessionId = sessionId;
     this.agentId = agentId;
+  }
+
+  /** Track a key that was accessed (for deletion proof hash) */
+  trackAccess(key: string): void {
+    this._accessedKeys.add(key);
+  }
+
+  /** Get all tracked keys */
+  get accessedKeys(): string[] {
+    return [...this._accessedKeys];
+  }
+
+  /** Compute memory hash from tracked keys */
+  computeMemoryHash(): string {
+    const keys = [...this._accessedKeys].sort().join('');
+    return createHash('sha256').update(keys).digest('hex');
   }
 
   async refresh(refreshToken: string): Promise<RefreshResult> {
@@ -19,7 +37,7 @@ export class SessionClient {
   }
 
   async submitDeletionProof(opts: DeletionProofOptions = {}): Promise<DeletionProofResult> {
-    const hash = createHash('sha256').update(`${this.sessionId}:${Date.now()}`).digest('hex');
+    const memoryHash = opts.memoryHash ?? this.computeMemoryHash();
 
     return this.transport.requestJson<DeletionProofResult>(
       `/v1/sessions/${this.sessionId}/deletion-proof`,
@@ -31,10 +49,10 @@ export class SessionClient {
           session_id: this.sessionId,
           agent_id: this.agentId,
           deleted_at: new Date().toISOString(),
-          memory_hash: `sha256:${hash}`,
+          memory_hash: `sha256:${memoryHash}`,
           fields_accessed: opts.fieldsAccessed ?? ['key', 'value'],
           method: opts.method ?? 'process_termination',
-          proof_value: `sha256:${hash}`,
+          proof_value: `sha256:${memoryHash}`,
         }),
       }
     );
@@ -46,8 +64,8 @@ export class SessionClient {
 
   async isActive(): Promise<boolean> {
     try {
-      const resp = await this.transport.request(`/v1/sessions/${this.sessionId}/close`, { method: 'POST' });
-      return resp.ok;
+      await this.transport.requestJson(`/v1/sessions/${this.sessionId}`);
+      return true;
     } catch {
       return false;
     }

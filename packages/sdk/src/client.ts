@@ -7,14 +7,16 @@ import { AuditClient } from './audit.js';
 import type { UompClientOptions } from './types.js';
 
 export class UompClient {
-  readonly transport: Transport;
+  /** @internal */
+  readonly _transport: Transport;
   readonly memory: MemoryClient;
   readonly aggregate: AggregateClient;
   readonly payload: PayloadClient;
-  readonly session: SessionClient;
   readonly audit: AuditClient;
+  session: SessionClient;
 
   private _token: string;
+  private _agentId: string;
 
   constructor(options: UompClientOptions = {}) {
     const token = options.token || process.env.UOM_TOKEN || '';
@@ -23,25 +25,37 @@ export class UompClient {
     const sessionId = options.sessionId || process.env.UOMP_SESSION_ID || '';
 
     this._token = token;
+    this._agentId = agentId;
 
-    this.transport = new Transport(
+    this._transport = new Transport(
       { ...options, baseUrl, agentId },
       () => this._token
     );
 
-    this.memory = new MemoryClient(this.transport);
-    this.aggregate = new AggregateClient(this.transport);
-    this.payload = new PayloadClient(this.transport);
-    this.session = new SessionClient(this.transport, sessionId, agentId);
-    this.audit = new AuditClient(this.transport);
+    this.memory = new MemoryClient(this._transport);
+    this.aggregate = new AggregateClient(this._transport);
+    this.payload = new PayloadClient(this._transport);
+    this.session = new SessionClient(this._transport, sessionId, agentId);
+    this.audit = new AuditClient(this._transport);
   }
 
-  get token(): string {
-    return this._token;
+  get token(): string { return this._token; }
+  set token(value: string) { this._token = value; }
+
+  /** Whether using Gateway mTLS (baseUrl starts with https://) */
+  get isRemote(): boolean {
+    return this._transport.baseUrl.startsWith('https://');
   }
 
-  set token(value: string) {
-    this._token = value;
+  /** Switch to a different session (e.g. in serverless mode) */
+  useSession(sessionId: string, agentId?: string): this {
+    this.session = new SessionClient(this._transport, sessionId, agentId ?? this._agentId);
+    return this;
+  }
+
+  /** Health check */
+  async health(): Promise<{ status: string; agent?: string; version?: string }> {
+    return this._transport.requestJson('/v1/health');
   }
 
   static fromEnv(): UompClient {

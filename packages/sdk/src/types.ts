@@ -1,27 +1,6 @@
-export type Sensitivity = 'low' | 'medium' | 'high';
+import type { MemoryItem, Sensitivity, AuditLogEntry } from '@uomp/core';
 
-export interface MemoryItem<T = unknown> {
-  key: string;
-  value: T;
-  tags: string[];
-  sensitivity: Sensitivity;
-  source: 'user' | 'agent';
-  createdAt: string;
-  updatedAt: string;
-  description?: string;
-}
-
-export interface AuditLogEntry {
-  id: string;
-  timestamp: string;
-  sessionId: string;
-  agentId: string;
-  action: string;
-  key?: string;
-  tags?: string[];
-  allowed: boolean;
-  reason: string;
-}
+export type { MemoryItem, Sensitivity, AuditLogEntry };
 
 export type AggregateOp = 'sum' | 'avg' | 'count' | 'min' | 'max';
 
@@ -45,6 +24,7 @@ export interface DeletionProofResult {
 export interface DeletionProofOptions {
   fieldsAccessed?: string[];
   method?: string;
+  memoryHash?: string;
 }
 
 export interface RefreshResult {

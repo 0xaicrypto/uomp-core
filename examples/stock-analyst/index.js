@@ -42,7 +42,7 @@ async function main() {
 
     console.log(`${lang === 'en' ? 'Reports' : '报告'}: output/stock-analysis-${ts}.(json|md|html)`);
 
-    if (uomp.transport['baseUrl']?.startsWith('https://')) {
+    if (uomp.isRemote) {
       try {
         const id = await uomp.payload.upload(reportEn + '\n\n---\n\n' + reportZh);
         console.log(`\nPayload: ${id}`);

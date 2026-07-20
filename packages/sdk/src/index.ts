@@ -1,18 +1,19 @@
 export { UompClient } from './client.js';
-export { Transport } from './transport.js';
+export { UompError, UompErrorCode } from './errors.js';
+export * from './types.js';
+
+// Sub-clients (for advanced use)
 export { MemoryClient } from './memory.js';
 export { AggregateClient } from './aggregate.js';
 export { PayloadClient } from './payload.js';
 export { SessionClient } from './session.js';
 export { AuditClient } from './audit.js';
-export { UompError, UompErrorCode } from './errors.js';
-export * from './types.js';
 
 // ── Backward compatibility ────────────────────────────────────────
 
 import { MemoryClient } from './memory.js';
-import { Transport } from './transport.js';
-import type { MemoryItem } from './types.js';
+import type { MemoryItem, UompClientOptions } from './types.js';
+import { UompClient } from './client.js';
 
 export interface UserMemoryClientOptions {
   baseUrl?: string;
@@ -23,28 +24,26 @@ export interface UserMemoryClientOptions {
 }
 
 export class UserMemory {
-  private memory: MemoryClient;
-  private transport: Transport;
+  private client: UompClient;
 
   constructor(options: UserMemoryClientOptions) {
-    this.transport = new Transport({
-      baseUrl: options.baseUrl ?? 'http://127.0.0.1:9374',
+    this.client = new UompClient({
+      token: options.token,
+      baseUrl: options.baseUrl,
       agentId: options.agentId,
       transport: {
         timeout: options.timeoutMs ?? 10000,
         fetch: options.fetch,
       },
-    }, () => options.token);
-
-    this.memory = new MemoryClient(this.transport);
+    });
   }
 
   async get<T = unknown>(key: string): Promise<MemoryItem<T> | null> {
-    return this.memory.get<T>(key);
+    return this.client.memory.get<T>(key);
   }
 
   async getByTag<T = unknown>(tag: string): Promise<MemoryItem<T>[]> {
-    return this.memory.getByTag<T>(tag);
+    return this.client.memory.getByTag<T>(tag);
   }
 
   async set<T = unknown>(_key: string, _value: T): Promise<boolean> {

@@ -22,7 +22,7 @@ export interface TransportResponse {
 }
 
 export class Transport {
-  private baseUrl: string;
+  readonly baseUrl: string;
   private agentId?: string;
   private timeoutMs: number;
   private retries: number;
