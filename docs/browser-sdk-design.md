@@ -1,7 +1,9 @@
 # UOMP Browser SDK 设计文档
 
-> 状态：草案
-> 目标：让浏览器端应用（Web App、Chrome Extension、React Native）直接使用 `@uomp/sdk` 连接 Gateway
+> 状态：Phase 1-2 已实现，Dashboard 已上线
+> 实现进度：✅ BrowserSDK 入口 ✅ Transport 浏览器检测 ✅ 钱包认证 (MetaMask + Argent X) ✅ localStorage 加密存储 ✅ Agent 直连分析
+
+> 线上 Demo：https://www.uomp.org/dashboard/
 
 ---
 

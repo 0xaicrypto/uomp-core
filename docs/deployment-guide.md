@@ -6,50 +6,31 @@ UOMP 支持三种部署模式。按用户负担从低到高排列：
 
 | 模式 | 用户需要做什么 | 适用场景 |
 |------|--------------|---------|
-| **浏览器模式** | 连接钱包 → 签名 | Web App、Dashboard |
+| **浏览器模式（零安装）** | 连接钱包 → 签名 | Web App、Dashboard |
 | **本地模式** | 安装 CLI | Node.js Agent 在同一台机器 |
 | **远程模式** | 启动 Gateway + Tunnel | Agent 在云服务 / 另一台机器 |
 
 ---
 
-## 1. 浏览器模式（零安装）
+## 1. 浏览器模式（零安装，推荐）
 
-用户不需要安装 CLI、不需要启动 Gateway。只需要一个浏览器和钱包。
+用户不需要安装 CLI、不需要启动 Gateway。只需要浏览器和钱包。
 
-### 1.1 架构
+### 在线 Demo
+
+👉 **[https://www.uomp.org/dashboard/](https://www.uomp.org/dashboard/)**
+
+### 流程
 
 ```
-Browser App ──读──► S3 (密文) ──► 浏览器内 AES-256-GCM 解密
-            ──写──► Cloud Relay ──► Guard ──► Store
+打开页面 → 点 MetaMask / Argent X → 签名 "UOMP Store v1"
+  → 编辑持仓（表格直接编辑或导入 CSV）
+  → 💾 Save（AES-256 加密到浏览器 localStorage）
+  → 📊 Analyze（浏览器内分析：P&L、HHI、行业分布）
+  → 或发送到 DO Agent 做深度分析
 ```
 
-### 1.2 用户侧操作（一次性）
-
-```bash
-# 1. 安装 CLI 并初始化（仅首次需要）
-pnpm install && pnpm build
-pnpm cli init
-
-# 2. 配置加密存储后端
-uomp config set store.backend encrypted-object
-uomp config set store.s3.endpoint https://xxx.r2.cloudflarestorage.com
-uomp config set store.s3.bucket uomp-data
-uomp config set store.s3.region auto
-uomp config set store.s3.accessKeyId xxx
-uomp config set store.s3.secretAccessKey xxx
-
-# 3. 初始化用户身份（钱包签名）
-uomp user init --wallet ethereum
-# → 浏览器弹出 MetaMask → 签名 "UOMP Store v1"
-# → 生成 masterKey → 存储到 ~/.uomp/user.json
-
-# 4. 导入数据
-pnpm cli import ./holdings.csv --tag portfolio:holdings --sensitivity high
-pnpm cli import ./risk.json --replace
-
-# 5. 推送到云端
-uomp sync push
-```
+无需 Gateway。无需 CLI。无需服务器。分析在浏览器内或直接发送到已部署的 Agent。
 
 ### 1.3 Webapp 开发者集成
 
