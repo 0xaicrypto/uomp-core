@@ -1,17 +1,23 @@
 import Database from 'better-sqlite3';
 import type { MemoryItem, Sensitivity } from '@uomp/core';
+import type { IMemoryStore, StoreStats } from './types.js';
+
+export type { IMemoryStore, StoreStats, StoreBackendConfig } from './types.js';
 
 export interface StoreOptions {
   dbPath: string;
 }
 
 export class MemoryStore {
+  readonly backend = 'sqlite';
   private db: Database.Database;
 
   constructor(options: StoreOptions) {
     this.db = new Database(options.dbPath);
     this.initSchema();
   }
+
+  get isReady(): boolean { return true; }
 
   private initSchema(): void {
     this.db.exec(`
@@ -25,7 +31,6 @@ export class MemoryStore {
         updated_at TEXT NOT NULL,
         description TEXT
       );
-
       CREATE INDEX IF NOT EXISTS idx_memory_items_tags ON memory_items(tags);
       CREATE INDEX IF NOT EXISTS idx_memory_items_source ON memory_items(source);
     `);
@@ -33,20 +38,19 @@ export class MemoryStore {
 
   get<T = unknown>(key: string): MemoryItem<T> | null {
     const row = this.db.prepare('SELECT * FROM memory_items WHERE key = ?').get(key) as Record<string, string> | undefined;
-    return row ? this.deserialize(row) : null;
+    return row ? this.deserialize<T>(row) : null;
   }
 
   getByTag<T = unknown>(tag: string): MemoryItem<T>[] {
-    // Use SQLite JSON1 extension to search inside JSON tag arrays.
     const rows = this.db
       .prepare("SELECT * FROM memory_items WHERE EXISTS (SELECT 1 FROM json_each(tags) WHERE value = ?)")
       .all(tag) as Record<string, string>[];
-    return rows.map(row => this.deserialize(row));
+    return rows.map(row => this.deserialize<T>(row));
   }
 
   getAll<T = unknown>(): MemoryItem<T>[] {
     const rows = this.db.prepare('SELECT * FROM memory_items').all() as Record<string, string>[];
-    return rows.map(row => this.deserialize(row));
+    return rows.map(row => this.deserialize<T>(row));
   }
 
   set<T = unknown>(item: Omit<MemoryItem<T>, 'createdAt' | 'updatedAt'> & Partial<Pick<MemoryItem<T>, 'createdAt' | 'updatedAt'>>): boolean {
@@ -55,35 +59,38 @@ export class MemoryStore {
     const createdAt = existing?.createdAt ?? item.createdAt ?? now;
     const updatedAt = item.updatedAt ?? now;
 
-    const stmt = this.db.prepare(`
+    this.db.prepare(`
       INSERT INTO memory_items (key, value, tags, sensitivity, source, created_at, updated_at, description)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET
-        value = excluded.value,
-        tags = excluded.tags,
-        sensitivity = excluded.sensitivity,
-        source = excluded.source,
-        updated_at = excluded.updated_at,
-        description = excluded.description
-    `);
-
-    stmt.run(
-      item.key,
-      JSON.stringify(item.value),
-      JSON.stringify(item.tags),
-      item.sensitivity,
-      item.source,
-      createdAt,
-      updatedAt,
-      item.description ?? null
-    );
-
+        value = excluded.value, tags = excluded.tags, sensitivity = excluded.sensitivity,
+        source = excluded.source, updated_at = excluded.updated_at, description = excluded.description
+    `).run(item.key, JSON.stringify(item.value), JSON.stringify(item.tags),
+      item.sensitivity, item.source, createdAt, updatedAt, item.description ?? null);
     return true;
   }
 
   delete(key: string): boolean {
     const result = this.db.prepare('DELETE FROM memory_items WHERE key = ?').run(key);
     return result.changes > 0;
+  }
+
+  listTags(): string[] {
+    const rows = this.db.prepare('SELECT DISTINCT tags FROM memory_items').all() as { tags: string }[];
+    const tagSet = new Set<string>();
+    for (const row of rows) {
+      try { for (const t of JSON.parse(row.tags)) tagSet.add(t); } catch {}
+    }
+    return [...tagSet];
+  }
+
+  count(): number {
+    const row = this.db.prepare('SELECT COUNT(*) as cnt FROM memory_items').get() as { cnt: number };
+    return row.cnt;
+  }
+
+  close(): void {
+    this.db.close();
   }
 
   private deserialize<T>(row: Record<string, string>): MemoryItem<T> {
@@ -98,8 +105,29 @@ export class MemoryStore {
       description: row.description,
     };
   }
-
-  close(): void {
-    this.db.close();
-  }
 }
+
+/** Async adapter that wraps sync MemoryStore for IMemoryStore interface */
+export class AsyncStoreAdapter implements IMemoryStore {
+  readonly backend: string;
+
+  constructor(private store: MemoryStore) {
+    this.backend = store.backend;
+  }
+
+  get isReady(): boolean { return true; }
+
+  async connect(): Promise<void> {}
+  async disconnect(): Promise<void> { this.store.close(); }
+
+  async get<T>(key: string): Promise<MemoryItem<T> | null> { return this.store.get<T>(key); }
+  async getByTag<T>(tag: string): Promise<MemoryItem<T>[]> { return this.store.getByTag<T>(tag); }
+  async getAll<T>(): Promise<MemoryItem<T>[]> { return this.store.getAll<T>(); }
+  async set<T>(item: Omit<MemoryItem<T>, 'createdAt' | 'updatedAt'> & Partial<Pick<MemoryItem<T>, 'createdAt' | 'updatedAt'>>): Promise<boolean> { return this.store.set(item); }
+  async delete(key: string): Promise<boolean> { return this.store.delete(key); }
+  async listTags(): Promise<string[]> { return this.store.listTags(); }
+  async count(): Promise<number> { return this.store.count(); }
+  async stats(): Promise<StoreStats> { return { itemCount: this.store.count(), totalSizeBytes: 0, backend: 'sqlite', encryptionEnabled: false }; }
+}
+
+export { createStore } from './factory.js';

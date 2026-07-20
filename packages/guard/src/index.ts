@@ -2,13 +2,15 @@ import Database from 'better-sqlite3';
 import { Hono } from 'hono';
 import type { MemoryItem } from '@uomp/core';
 import { generateId } from '@uomp/core';
-import { MemoryStore } from '@uomp/store';
+import { MemoryStore, AsyncStoreAdapter } from '@uomp/store';
+import type { IMemoryStore } from '@uomp/store';
 import { JWTTokenIssuer, isTokenExpired, type CapabilityTokenPayload } from '@uomp/token';
 
 export interface GuardOptions {
   dbPath: string;
   memoryDbPath: string;
   issuer: JWTTokenIssuer;
+  store?: IMemoryStore;
 }
 
 export interface AuditLogEntry {
@@ -25,13 +27,13 @@ export interface AuditLogEntry {
 
 export class MemoryGuard {
   private db: Database.Database;
-  private store: MemoryStore;
+  private store: IMemoryStore;
   private issuer: JWTTokenIssuer;
   private app: Hono;
 
   constructor(options: GuardOptions) {
     this.db = new Database(options.dbPath);
-    this.store = new MemoryStore({ dbPath: options.memoryDbPath });
+    this.store = options.store ?? new AsyncStoreAdapter(new MemoryStore({ dbPath: options.memoryDbPath }));
     this.issuer = options.issuer;
     this.initSchema();
     this.app = this.createApp();
@@ -107,7 +109,7 @@ export class MemoryGuard {
         return c.json({ error: { code: 'ACCESS_DENIED', message: allowed.reason, session_id: validation.payload!.sessionId } }, 403);
       }
 
-      const items = this.store.getByTag(tag);
+      const items = await this.store.getByTag(tag);
       const filtered = items.filter(item => this.isKeyAllowed(item.key, item, validation.payload!, 'read').allowed);
 
       const result = this.computeAggregation(filtered, op, field ?? undefined);
@@ -135,7 +137,7 @@ export class MemoryGuard {
         return c.json({ error: { code: 'ACCESS_DENIED', message: 'Token only permits aggregation queries' } }, 403);
       }
 
-      const item = this.store.get(key);
+      const item = await this.store.get(key);
       const allowed = this.isKeyAllowed(key, item, validation.payload!, 'read');
 
       this.logAudit({
@@ -193,7 +195,7 @@ export class MemoryGuard {
         return c.json({ error: { code: 'ACCESS_DENIED', message: allowed.reason, session_id: validation.payload!.sessionId } }, 403);
       }
 
-      const items = this.store.getByTag(tag);
+      const items = await this.store.getByTag(tag);
       const filtered = items.filter(item => this.isKeyAllowed(item.key, item, validation.payload!, 'read').allowed);
 
       return c.json({ items: filtered.map(item => this.serializeItem(item, validation.payload!.allowedFields)) });
@@ -477,6 +479,6 @@ export class MemoryGuard {
 
   close(): void {
     this.db.close();
-    this.store.close();
+    this.store.disconnect().catch(() => {});
   }
 }
