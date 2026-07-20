@@ -1,0 +1,57 @@
+name: Deploy Stock Analyst to Digital Ocean
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'examples/stock-analyst/**'
+      - 'packages/core/**'
+      - 'packages/sdk/**'
+      - 'packages/store/**'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build -f examples/stock-analyst/Dockerfile \
+            -t registry.digitalocean.com/uomp-registry/stock-analyst:${{ github.sha }} \
+            -t registry.digitalocean.com/uomp-registry/stock-analyst:latest \
+            .
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Push to DOCR
+        run: |
+          doctl registry login --expiry-seconds 300
+          docker push registry.digitalocean.com/uomp-registry/stock-analyst:${{ github.sha }}
+          docker push registry.digitalocean.com/uomp-registry/stock-analyst:latest
+
+      - name: Update DO App
+        run: |
+          doctl apps update 177636d4-cabb-4319-b29e-8e2b9102e10f --spec - <<YAML
+          name: uomp-stock-analyst
+          region: nyc
+          services:
+            - name: api
+              image:
+                registry_type: DOCR
+                registry: uomp-registry
+                repository: stock-analyst
+                tag: ${{ github.sha }}
+              http_port: 3080
+              instance_count: 1
+              instance_size_slug: basic-xxs
+              routes:
+                - path: /
+              health_check:
+                http_path: /health
+          YAML
