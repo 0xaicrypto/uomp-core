@@ -82,6 +82,15 @@ async function runAnalysis(token, gatewayUrl, sessionId, finnhubKey, userConfig)
 
 const app = new Hono();
 
+// CORS for cross-origin dashboard
+app.use('*', async (c, next) => {
+  c.header('Access-Control-Allow-Origin', '*');
+  c.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (c.req.method === 'OPTIONS') return new Response(null, { status: 204 });
+  await next();
+});
+
 app.get('/health', c => c.json({ status: 'ok', agent: AGENT_ID, version: AGENT_VERSION, name: AGENT_NAME }));
 
 app.get('/fingerprint', c => {
