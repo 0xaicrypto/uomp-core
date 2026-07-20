@@ -333,7 +333,114 @@ uomp.isGatewayOnline: boolean
 
 Webapp 据此控制 UI：写入按钮禁用、顶部显示离线 banner。
 
-## 9. 对规范的影响
+## 9. UOMP Cloud Relay（公共转发节点）
+
+Cloud Relay 是一个**无状态的公共 Gateway**，替代用户本地 Gateway 处理写请求和聚合查询。任何人都可以部署，UOMP 官方运营一个作为默认值。
+
+### 9.1 为什么可以信任 Relay
+
+Relay 全程只过手密文：
+
+```
+Browser SDK          Cloud Relay              S3 / Store
+───────────          ────────────             ──────────
+data                            
+  ↓ AES-256-GCM                     
+密文 ──────────► 验签名 ──────────► 存密文
+                 转发密文
+                 
+                 Relay 能做的：
+                 ✅ 拒绝转发（DoS）
+                 ✅ 看到元数据（时间、tag名）
+                 ❌ 读明文（没有 masterKey）
+                 ❌ 改数据（AES-GCM 认证防篡改）
+                 ❌ 冒充用户（签名不匹配）
+```
+
+### 9.2 职责拆分
+
+| 职责 | 浏览器自己做 | Cloud Relay 做 |
+|------|:----------:|:------------:|
+| JWT 验签 | ✅ 用公钥校验 | ✅ 做第二道防线 |
+| Scope 过滤 | ✅ denyTags/denyKeys/fields | ✅ 做第二道防线 |
+| 加密 / 解密 | ✅ AES-256-GCM | ❌ 没 key |
+| 写请求转发 | ❌ 需要 Guard | ✅ 验 Token → 转 Guard |
+| 聚合计算 | ❌ 需要 Guard | ✅ 验 Token → 转 Guard |
+| 审计日志 | ⚠️ 客户端签名证明 | ✅ 可信日志 |
+| 链上锚定 | ✅ 自己签名上链 | ✅ 批量上链 |
+
+### 9.3 部署模式
+
+```
+模式 1：默认（用户零安装）
+  Browser App ──► Cloud Relay (relay.uomp.org) ──► Guard ──► Store
+
+模式 2：完全自托管（最信任）
+  Browser App ──► 自建 Relay (VPS / NAS) ──► Guard ──► Store
+
+模式 3：混合（当前方式，最敏感数据）
+  Browser App ──► 用户 Gateway ──► Guard ──► Store
+```
+
+### 9.4 开源 Relay 实现
+
+```
+apps/relay/                  # 新增
+├── src/
+│   ├── index.ts             # Hono 服务器
+│   ├── verify.ts            # Token 验签（公钥模式）
+│   └── forward.ts           # 转发到 Guard
+├── Dockerfile
+└── README.md
+```
+
+和现有 Gateway 的区别：
+
+| | Gateway | Relay |
+|------|---------|-------|
+| mTLS | 是（用户侧） | 否（公共接入） |
+| 知道明文 | 是 | 否（Store 加密） |
+| 部署位置 | 用户本地 | 云服务 |
+| Token 校验 | 签名 + audience | 签名 + audience + 限流 |
+| 适用场景 | 个人自托管 | 公共 / 第三方运营 |
+
+### 9.5 多 Relay 互备
+
+```ts
+// SDK 支持多个 Relay，自动故障转移
+const uomp = await BrowserSDK.fromWallet({
+  relays: [
+    'https://relay.uomp.org',
+    'https://relay.community-node.io',
+    'https://my-own-relay.com',
+  ],
+  storeConfig: { backend: 'encrypted-object', ... },
+});
+
+// 写请求：按顺序尝试 relay，任一连通即可
+await uomp.memory.set('AAPL', data);
+// → 尝试 relay.uomp.org → 成功
+// → 失败？→ 尝试下一个
+```
+
+### 9.6 对 Webapp 开发者的影响
+
+```ts
+// 零依赖模式：不需要用户装任何东西
+const uomp = await BrowserSDK.fromWallet({
+  relayUrl: 'https://relay.uomp.org',   // 默认值，可省略
+});
+
+// 读：S3 直读 + 客户端验签 → 零服务端依赖
+const holdings = await uomp.memory.getByTag('portfolio:holdings');
+
+// 写：自动走 Relay → 加密 → 转发 → Store
+await uomp.memory.set('AAPL', newData);
+
+// 审计：读操作客户端签名上链，写操作 Relay 日志
+```
+
+## 10. 对规范的影响
 
 | 位置 | 变更 |
 |------|------|
@@ -383,7 +490,7 @@ Webapp 据此控制 UI：写入按钮禁用、顶部显示离线 banner。
 > 5. Backend credentials (S3 keys, etc.) SHOULD be stored in `~/.uomp/config.json` with file permissions `0600`.
 
 
-## 9. SDK 改动
+## 11. SDK 改动
 
 ### `@uomp/sdk` 新增
 
@@ -451,7 +558,7 @@ uomp sync pull / push / auto
 ```
 
 
-## 10. 实施路线
+## 12. 实施路线
 
 ### Phase 1：Store 接口抽象（核心）
 
@@ -484,6 +591,17 @@ uomp sync pull / push / auto
 | 加密 index（tag→keys 映射） | 同上 |
 | `uomp store switch encrypted-object` | CLI |
 
+### Phase 3.5：Cloud Relay 公共节点
+
+| 任务 | 文件 |
+|------|------|
+| Relay 实现（无状态 Gateway） | `apps/relay/src/index.ts`（新）|
+| Token 公钥验签（不需要私钥） | `apps/relay/src/verify.ts` |
+| 转发到 Guard（验 scope + 写审计） | `apps/relay/src/forward.ts` |
+| 限流 + anti-abuse | 同上 |
+| SDK 多 Relay 故障转移 | `packages/sdk/src/transport.ts` |
+| `uomp relay start` 命令（自建） | CLI |
+
 ### Phase 4：浏览器体验
 
 | 任务 | 文件 |
@@ -493,7 +611,7 @@ uomp sync pull / push / auto
 | S3 后端浏览器直连（绕过 Gateway） | 浏览器 SDK（可选） |
 
 
-## 11. 向后兼容
+## 13. 向后兼容
 
 - 现有用户：`uomp init` 后默认 `backend: sqlite`，行为完全不变
 - `~/.uomp/config.json` 新增 `store` 字段（可选，缺省 = sqlite）
