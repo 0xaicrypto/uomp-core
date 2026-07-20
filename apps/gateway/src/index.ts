@@ -169,10 +169,11 @@ async function main() {
     });
   }
 
-  // Token validation middleware (skip health and session creation)
+  // Token validation middleware (skip health, session creation, and grant)
   app.use('/v1/*', async (c, next) => {
     if (c.req.path === '/v1/health') return next();
     if (c.req.path === '/v1/sessions' && c.req.method === 'POST') return next();
+    if (c.req.path.startsWith('/v1/sessions/') && c.req.path.endsWith('/grant') && c.req.method === 'POST') return next();
 
     const authHeader = c.req.header('authorization');
     const agentId = c.req.header('x-uomp-agent-id');
@@ -189,10 +190,6 @@ async function main() {
       return c.json({ error: { code: 'INVALID_TOKEN', message: `Token verification failed: ${(err as Error).message}` } }, 401);
     }
 
-    if (payload.profile !== 'remote') {
-      return c.json({ error: { code: 'INVALID_PROFILE', message: 'Token profile is not remote' } }, 403);
-    }
-
     if (payload.audience && payload.audience !== audienceRef.value) {
       return c.json({ error: { code: 'AUDIENCE_MISMATCH', message: 'Token audience does not match this Gateway' } }, 403);
     }
@@ -205,8 +202,8 @@ async function main() {
       return c.json({ error: { code: 'AGENT_MISMATCH', message: 'X-UOMP-Agent-Id does not match token' } }, 403);
     }
 
-    // mTLS allowlist check
-    if (config.requireMtls) {
+    // mTLS allowlist check (skip when browser mode)
+    if (config.requireMtls && !config.allowBrowser) {
       const fingerprint = getPeerFingerprint(c.env.incoming);
       if (!fingerprint) {
         return c.json({ error: { code: 'MTLS_REQUIRED', message: 'Client certificate required' } }, 401);
