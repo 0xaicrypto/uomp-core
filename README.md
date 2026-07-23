@@ -18,13 +18,10 @@
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" /></a>
   <a href="https://github.com/0xaicrypto/uomp/discussions"><img src="https://img.shields.io/github/discussions/0xaicrypto/uomp" alt="Discussions" /></a>
   <a href="https://github.com/0xaicrypto/uomp-core/issues"><img src="https://img.shields.io/github/issues/0xaicrypto/uomp-core" alt="Issues" /></a>
-  <a href="https://github.com/0xaicrypto/uomp-core"><img src="https://img.shields.io/github/stars/0xaicrypto/uomp-core?style=social" alt="Stars" /></a>
 </p>
 
 <p align="center">
-  <a href="https://star-history.com/#0xaicrypto/uomp-core&Date">
-    <img src="https://api.star-history.com/svg?repos=0xaicrypto/uomp-core&type=Date" alt="Star History Chart" width="600" />
-  </a>
+  <a href="https://github.com/0xaicrypto/uomp-core/stargazers"><img src="https://img.shields.io/github/stars/0xaicrypto/uomp-core?style=for-the-badge&color=8B5CF6" alt="GitHub Stars" /></a>
 </p>
 
 <p align="center">
