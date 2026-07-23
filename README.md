@@ -302,9 +302,36 @@ MVP defaults are intentionally conservative:
 - [x] Store abstraction (`IMemoryStore`)
 - [x] Example Agents (calendar + stock analyst)
 - [ ] Agent write staging & approval flow
-- [ ] Starknet on-chain revocation anchoring
+- [ ] On-chain audit (authorization, revocation, access events)
+- [ ] FHE integration (agent computes on ciphertext, never sees plaintext)
 - [ ] Semantic retrieval (`query` endpoint)
 - [ ] Production-grade multi-backend support
+
+### Ultimate vision: FHE + On-chain Audit
+
+Today: you authorize an agent, it reads your plaintext data, it could remember it. You trust the agent.
+
+**Endgame**: Fully Homomorphic Encryption. Your data is encrypted before it leaves your machine. The agent reads **ciphertext**, runs analysis on **ciphertext**, outputs **ciphertext results**. Only you decrypt the results. The agent can keep the ciphertext forever — without your private key, it's garbage.
+
+```
+Today:                             Endgame:
+  plaintext → Agent                ciphertext → Agent
+  Agent may remember               Agent cannot decrypt
+  Trust required                   Trustless by math
+```
+
+Combined with on-chain audit (Phase 4-5), this creates a full trustless lifecycle:
+
+```
+User encrypts → Agent computes on ciphertext → results decrypted by user
+     ↓                          ↓                          ↓
+  Chain: Authorization      Chain: Access           Chain: zkFHE proof
+  (scopes, fhe_mode)        (tag, ciphertext)       (computation verified)
+```
+
+When both are in place, UOMP achieves its original promise: **your data, your rules, verifiable by anyone, trusted by no one.**
+
+Read the full design: [docs/on-chain-audit-design.md](docs/on-chain-audit-design.md)
 
 ### Links
 
@@ -579,9 +606,36 @@ MVP 默认采取保守策略：
 - [x] Store 抽象（`IMemoryStore`）
 - [x] 示例 Agent（calendar + stock analyst）
 - [ ] Agent 写入 staging/审批流程
-- [ ] Starknet 链上撤销锚定
+- [ ] 链上审计（授权、撤销、访问事件）
+- [ ] FHE 集成（Agent 在密文上计算，永远看不到明文）
 - [ ] 语义检索（`query` 接口）
 - [ ] 生产级多后端支持
+
+### 终极愿景：FHE + 链上审计
+
+现在：你授权 Agent，Agent 读明文数据，Agent 可以记住。你需要信任 Agent。
+
+**终局**：全同态加密。数据在离开你的设备前已经加密。Agent 读**密文**，在**密文**上分析，输出**密文**结果。只有你能解密结果。Agent 可以永远保留密文——没有你的私钥，它就是垃圾。
+
+```
+现在：                             终局：
+  明文 → Agent                     密文 → Agent
+  Agent 可能记住                   Agent 无法解密
+  需信任 Agent                     数学保证，无需信任
+```
+
+结合链上审计（Phase 4-5），形成完整的无信任闭环：
+
+```
+用户加密 → Agent 密文计算 → 用户解密结果
+   ↓               ↓              ↓
+链上：授权       链上：访问      链上：zkFHE
+(scopes, fhe)    (tag, 密文)     (计算验证)
+```
+
+两者兼备时，UOMP 兑现其原始承诺：**你的数据，你的规则，人人可验证，无需信任任何人。**
+
+完整设计文档：[docs/on-chain-audit-design.md](docs/on-chain-audit-design.md)
 
 ### 链接
 
