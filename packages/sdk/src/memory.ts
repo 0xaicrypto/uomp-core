@@ -56,4 +56,18 @@ export class MemoryClient {
       return false;
     }
   }
+
+  async set<T = Record<string, unknown>>(key: string, item: Omit<MemoryItem<T>, 'createdAt' | 'updatedAt' | 'key'>): Promise<boolean> {
+    await this.transport.request(`/v1/memory/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    });
+    return true;
+  }
+
+  async delete(key: string): Promise<boolean> {
+    await this.transport.request(`/v1/memory/${encodeURIComponent(key)}`, { method: 'DELETE' });
+    return true;
+  }
 }

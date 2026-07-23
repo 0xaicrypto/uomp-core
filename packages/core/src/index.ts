@@ -109,3 +109,68 @@ export interface AuditLogEntry {
 export function generateId(prefix: string): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
+
+export function inferSensitivity(tag: string): Sensitivity {
+  if (tag.includes('holdings') || tag.includes('transactions')) return 'high';
+  if (tag.startsWith('profile:') || tag.includes('watchlist')) return 'medium';
+  return 'low';
+}
+
+// ── Manifest loading (shared between CLI and SDK) ────────────
+
+export interface RawScopeAction {
+  tags?: string[];
+  keys?: string[];
+  deny_tags?: string[];
+  deny_keys?: string[];
+  allowed_fields?: string[];
+  fields?: Record<string, string[]>;
+  purposes?: Record<string, string>;
+}
+
+export interface RawAgentManifest {
+  uomp_version?: string;
+  agent?: { id?: string; name?: string; version?: string; description?: string; publisher?: string };
+  requested_scopes?: { read?: RawScopeAction; write?: RawScopeAction };
+  required_capabilities?: string[];
+  optional_capabilities?: string[];
+  requires_remote?: boolean;
+  identity?: { did?: string; verification_methods?: string[]; proof?: { type?: string; created?: string; proofValue?: string } };
+  package?: { checksum?: string; signature?: string; source_url?: string };
+  external_data_sources?: string[];
+  data_retention_policy?: { max_retention_seconds?: number; deletion_method?: string; proof_required?: boolean; description?: string; third_party_sharing?: boolean; encryption_at_rest?: boolean };
+}
+
+export function normalizeManifest(raw: RawAgentManifest): AgentManifest {
+  const scopeAction = (rawAction?: RawScopeAction): ScopeAction => ({
+    tags: rawAction?.tags ?? [],
+    keys: rawAction?.keys ?? [],
+    denyTags: rawAction?.deny_tags ?? [],
+    denyKeys: rawAction?.deny_keys ?? [],
+    allowedFields: rawAction?.allowed_fields,
+    fields: rawAction?.fields,
+    purposes: rawAction?.purposes,
+  });
+  const rawScopes = raw.requested_scopes ?? {};
+  const rawAgent = raw.agent ?? {};
+  return {
+    uompVersion: String(raw.uomp_version ?? '1.0'),
+    agent: { id: String(rawAgent.id ?? ''), name: String(rawAgent.name ?? ''), version: String(rawAgent.version ?? ''),
+      description: rawAgent.description, publisher: rawAgent.publisher },
+    requestedScopes: { read: scopeAction(rawScopes.read), write: scopeAction(rawScopes.write) },
+    requiredCapabilities: raw.required_capabilities,
+    optionalCapabilities: raw.optional_capabilities,
+    requiresRemote: Boolean(raw.requires_remote),
+    externalDataSources: raw.external_data_sources,
+    dataRetentionPolicy: raw.data_retention_policy ? {
+      maxRetentionSeconds: raw.data_retention_policy.max_retention_seconds ?? 0,
+      deletionMethod: (raw.data_retention_policy.deletion_method as 'process_termination' | 'secure_wipe' | 'ephemeral_storage') ?? 'process_termination',
+      proofRequired: raw.data_retention_policy.proof_required ?? false,
+      description: raw.data_retention_policy.description,
+      thirdPartySharing: raw.data_retention_policy.third_party_sharing ?? false,
+      encryptionAtRest: raw.data_retention_policy.encryption_at_rest ?? false,
+    } : undefined,
+    identity: raw.identity ? { did: raw.identity.did, verificationMethods: raw.identity.verification_methods,
+      proof: raw.identity.proof ? { type: String(raw.identity.proof.type ?? ''), created: String(raw.identity.proof.created ?? ''), proofValue: String(raw.identity.proof.proofValue ?? '') } : undefined } : undefined,
+  };
+}

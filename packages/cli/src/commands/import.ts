@@ -5,6 +5,7 @@ import { parse } from 'csv-parse/sync';
 import { UompConfig } from '../config.js';
 import { MemoryStore } from '@uomp/store';
 import type { MemoryItem, Sensitivity } from '@uomp/core';
+import { inferSensitivity } from '@uomp/core';
 
 interface ImportOptions {
   tag?: string;
@@ -88,7 +89,7 @@ export class ImportCommands {
       console.log(chalk.red('Please specify --tag'));
       return;
     }
-    sensitivity = sensitivity ?? this.inferSensitivity(tag);
+    sensitivity = sensitivity ?? inferSensitivity(tag);
 
     const mappings = parseMappings(options.map ?? []);
     const items = rawRecords.map((record, idx) => this.recordToMemoryItem(record, idx, tag!, sensitivity, options.keyField, mappings));
@@ -212,12 +213,6 @@ export class ImportCommands {
     if (!file) return undefined;
     const base = file.split('/').pop()?.split('.')[0];
     return base;
-  }
-
-  private inferSensitivity(tag: string): Sensitivity {
-    if (tag.includes('holdings') || tag.includes('transactions')) return 'high';
-    if (tag.startsWith('profile:') || tag.includes('watchlist')) return 'medium';
-    return 'low';
   }
 }
 

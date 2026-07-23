@@ -10,7 +10,8 @@ import { MemoryStore } from '@uomp/store';
 import { JWTTokenIssuer } from '@uomp/token';
 import { IdentityVerifier } from '@uomp/identity';
 import { loadManifest } from '../utils/manifest.js';
-import type { AgentManifest, ScopeAction, Scopes, Sensitivity } from '@uomp/core';
+import type { AgentManifest, ScopeAction, Scopes } from '@uomp/core';
+import { inferSensitivity } from '@uomp/core';
 import { writeFile } from 'fs/promises';
 
 export class AuthorizeCommands {
@@ -134,7 +135,7 @@ export class AuthorizeCommands {
 
     // Tag-level exposure summary
     for (const tag of readTags) {
-      const sensitivity = this.inferSensitivity(tag);
+      const sensitivity = inferSensitivity(tag);
       const levelLabel = sensitivity === 'high' ? chalk.red('high') : sensitivity === 'medium' ? chalk.yellow('medium') : chalk.green('low');
       console.log(`  [${levelLabel}] ${tag}`);
 
@@ -205,7 +206,7 @@ export class AuthorizeCommands {
   private addHighSensitivityKeys(scope: ScopeAction, tags: string[]): void {
     // High sensitivity items cannot be authorized by tag alone; explicitly include their keys.
     for (const tag of tags) {
-      if (this.inferSensitivity(tag) === 'high') {
+      if (inferSensitivity(tag) === 'high') {
         const items = this.store.getByTag(tag);
         for (const item of items) {
           if (!scope.keys.includes(item.key)) {
@@ -216,11 +217,6 @@ export class AuthorizeCommands {
     }
   }
 
-  private inferSensitivity(tag: string): Sensitivity {
-    if (tag.includes('holdings') || tag.includes('transactions')) return 'high';
-    if (tag.startsWith('profile:') || tag.includes('watchlist')) return 'medium';
-    return 'low';
-  }
 
   private async startServer(): Promise<void> {
     const isAvailable = await this.isPortAvailable(this.config.port, this.config.host);

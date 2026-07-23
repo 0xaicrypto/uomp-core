@@ -2,6 +2,7 @@ import { resolve } from 'path';
 import chalk from 'chalk';
 import { IdentityVerifier } from '@uomp/identity';
 import { loadManifest } from '../utils/manifest.js';
+import { inferSensitivity } from '@uomp/core';
 import { LocalRegistry } from '../utils/registry.js';
 import type { UompConfig } from '../config.js';
 
@@ -71,16 +72,10 @@ export class DiscoverCommands {
       console.log('  (none)');
     } else {
       for (const tag of readTags) {
-        const sensitivity = this.inferSensitivity(tag);
+        const sensitivity = inferSensitivity(tag);
         const label = sensitivity === 'high' ? chalk.red('high') : sensitivity === 'medium' ? chalk.yellow('medium') : chalk.green('low');
         console.log(`  [${label}] ${tag}`);
       }
     }
-  }
-
-  private inferSensitivity(tag: string): string {
-    if (tag.includes('holdings') || tag.includes('transactions')) return 'high';
-    if (tag.startsWith('profile:') || tag.includes('watchlist')) return 'medium';
-    return 'low';
   }
 }
