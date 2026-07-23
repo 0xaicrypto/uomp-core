@@ -1,6 +1,6 @@
 # UOMP 远程授权设计文档
 
-> 状态：Phase 1 已实现（uomp-mvp `apps/gateway`）
+> 状态：Phase 1 已实现（Gateway + mTLS + Cloudflare Tunnel + Browser CORS）
 > 目标：定义用户本地 Memory 与远程 Agent 之间的安全授权、通信与 Payload 交付机制。
 
 ---
@@ -399,7 +399,7 @@ event PayloadAnchored(bytes32 indexed payloadHash, bytes32 indexed sessionHash);
 
 ---
 
-## 8. 接口草案
+## 8. Gateway HTTP API（已实现）
 
 ### 8.1 Gateway HTTP API（已实现的 Phase 1）
 

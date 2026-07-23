@@ -1,6 +1,6 @@
 # UOMP SDK 设计文档
 
-> 状态：Phase 1 ✅ 已实现 | Phase 2 部分完成 | 线上验证通过
+> 状态：Phase 1-3 ✅ 全部完成 | Browser export ✅ | Wallet auth ✅ | Memory write ✅
 > 实现进度：✅ UompClient 全子客户端 ✅ Token 解码 ✅ Auth 子客户端 ✅ 浏览器入口 ✅ StoreRouter ✅ 钱包签名 (HKDF)
 > Demo：https://www.uomp.org/dashboard/
 

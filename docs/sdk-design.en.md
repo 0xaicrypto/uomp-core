@@ -1,6 +1,6 @@
 # UOMP SDK Design Document
 
-> Status: Draft
+> Status: Phase 1-3 complete ✅ | Browser export ✅ | Wallet auth ✅ | Memory write ✅
 > Objective: Define the complete API, architecture, integration patterns, and implementation roadmap for the UOMP Agent SDK.
 
 ---

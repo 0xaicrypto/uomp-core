@@ -400,7 +400,7 @@ Local Events ──► Batch Aggregation ──► Merkle root ──► Starkne
 
 ---
 
-## 8. Interface Draft
+## 8. Gateway HTTP API (Implemented)
 
 ### 8.1 Gateway HTTP API (Phase 1 implemented)
 
